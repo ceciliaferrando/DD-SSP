@@ -118,7 +118,6 @@ def testPrivApproxSSLogReg(yTX, XTXy2, X_test, y_test, n, C):
     clf = DPApproxLL(ch, yTX, XTXy2, n, penalty=None, alpha=alpha)
     clf.fit()
     y_pred = clf.predict(X_test, threshold=0.5)
-    print("aimss y_pred", y_pred)
     y_pred_proba = clf.predict_proba(X_test)
     DPapprox_accuracy = accuracy_score(y_test, y_pred)
     DPapprox_f1score = f1_score(y_test, y_pred)
@@ -134,7 +133,7 @@ def testApproxSSLogReg(X, y, X_test, y_test):
     C = 0.001
     alpha = 1 / (C * len(X))
     ch = Chebyshev(-6, 6, 3, phi_logit)
-    clf = ApproxLL(ch, 'l2', alpha)
+    clf = ApproxLL(ch, 'none', alpha)
     clf.fit(X, y)
     # evaluate performance on test set
     y_pred_proba = clf.predict_proba(X_test)
