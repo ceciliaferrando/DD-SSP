@@ -49,10 +49,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
     parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
-    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
+    parser.add_argument('--method', help='Method to be used', type=str, default='public-approx-ss',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
-    parser.add_argument('--num_experiments', type=int, default=5)
+    parser.add_argument('--num_experiments', type=int, default=1)
     parser.add_argument('--seed', type=int, default=236)
     parser.add_argument('--n_limit', type=int, default=20_000)
     parser.add_argument('--train_ratio', type=float, default=0.7)
@@ -75,6 +75,7 @@ if __name__ == "__main__":
     iterate_over_gamma = args.iterate_over_gamma
     one_hot = args.one_hot
     rescale = args.rescale
+    print(f"one hot {one_hot}, rescale {rescale}")
     
     model_size = 100  # FOR AIM
     max_iters = 1000   # FOR AIM
@@ -176,45 +177,7 @@ if __name__ == "__main__":
         for t in range(num_experiments):
             np.random.seed(seed + t)
 
-            if method == 'diffprivlib':
-                # DP REGRESSIONS
-                C_lr, C_lr_half = optimize_C(X, y, epsilon)
-                params = {'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]}
-
-                C_lr, C_lr_half = optimize_C(X, y, epsilon)
-                params = {'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0]}
-                dplr_fulleps = dp.LogisticRegression(epsilon=epsilon, data_norm=None,
-                                                     tol=0.0001, fit_intercept=True,
-                                                     max_iter=500, verbose=0, warm_start=False,
-                                                     n_jobs=None, accountant=None)
-                clf = dplr_fulleps
-                # Create a GridSearchCV object with cross-validation
-                grid_search = GridSearchCV(clf, param_grid=params, cv=5)
-                # Fit the GridSearchCV object to the data
-                grid_search.fit(X, y)
-                C_lr = grid_search.best_params_['C']
-
-                maxvals = np.array(np.amax(X.to_numpy(), axis=0)).reshape(-1, 1)
-                max_row_norm = np.sqrt(np.sum([a ** 2 for a in maxvals]))
-                print(max_row_norm)
-
-                data_norm = get_bound_X(one_hot, feature_dict, cols_to_dummy, target)
-                print(data_norm)
-
-                dplr_fulleps = dp.LogisticRegression(epsilon=epsilon, data_norm=data_norm,
-                                                     tol=0.0001, C=C_lr, fit_intercept=False,
-                                                     max_iter=1000, verbose=0, warm_start=False,
-                                                     n_jobs=None, accountant=None)
-
-                (private_f1score, private_accuracy,
-                 private_fpr, private_tpr,
-                 private_threshold, private_auc) = testPrivLogReg(X, y, X_test, y_test, dplr_fulleps)
-                print("private_auc", private_auc)
-                res_out.append([dataset, method, private_auc, None, None, t, seed,
-                                n_limit, train_ratio, C_lr, epsilon])
-                pbar.update(1)
-
-            elif method == 'public':
+            if method == 'public':
                 if one_hot:
                     encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
                     original_X_range = {feature: [0, domain[feature]] for feature in feature_dict.keys()}
@@ -242,6 +205,15 @@ if __name__ == "__main__":
                                 seed, n_limit, train_ratio, None, epsilon])
                 pbar.update(1)
 
+            elif method == 'public-approx-ss':
+                # public approximate SS baseline
+                (_, public_approx_accuracy,
+                 public_approx_fpr, public_approx_tpr,
+                 public_approx_threshold, public_approx_auc) = testApproxSSLogReg(X, y, X_test, y_test)
+                res_out.append([dataset, method, public_approx_auc, None, public_approx_accuracy, t,
+                                seed, n_limit, train_ratio, None, epsilon])
+                pbar.update(1)
+
             elif method == 'aim':
                 # add the same regularization as genobjpert
                 n, d = X.shape
@@ -253,7 +225,7 @@ if __name__ == "__main__":
                 # maxvals = np.array(np.amax(X.to_numpy(), axis = 0)).reshape(-1,1)
                 # max_row_norm = np.sqrt(np.sum([a**2 for a in maxvals]))
 
-                max_row_norm = get_bound_X(one_hot, feature_dict, cols_to_dummy, target)
+                _, max_row_norm = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot, rescale)
                 zeta = max_row_norm
                 lmda = smooth_const = max_row_norm ** 2 / 4
 

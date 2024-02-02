@@ -83,7 +83,6 @@ def genobjpert_get_params(X, epsilon, delta, lmda, zeta):
 
     return Delta, b
 
-
 def dp_objective(theta, X, y, n, d, Delta, b):
 
     base_loss = LogisticRegressionObjective.loss(theta, X, y)
@@ -92,7 +91,6 @@ def dp_objective(theta, X, y, n, d, Delta, b):
     third_term = np.dot(b.T, theta)/n
 
     return base_loss + regularizer + sec_term + third_term
-
 
 def dp_gradient(theta, X, y, n, d, Delta, b):
     # exponent = y * (X.dot(theta))
@@ -112,15 +110,15 @@ def get_dp_approx_ll(theta, yTX, XTXy2, a, b, c, n):
     dp_approx_ll = n * a + np.dot(theta, yTX) * b + np.dot(np.dot(theta, XTXy2), theta) * c
     return dp_approx_ll
 
-
 def testPrivApproxSSLogReg(yTX, XTXy2, X_test, y_test, n, C):
     y_test = 2 * y_test - 1
     ch = Chebyshev(-6, 6, 3, phi_logit)
     a, b, c = ch.c
     alpha = 1 / (n * C)
-    clf = DPApproxLL(ch, yTX, XTXy2, n, penalty='l2', alpha=alpha)
+    clf = DPApproxLL(ch, yTX, XTXy2, n, penalty=None, alpha=alpha)
     clf.fit()
     y_pred = clf.predict(X_test, threshold=0.5)
+    print("aimss y_pred", y_pred)
     y_pred_proba = clf.predict_proba(X_test)
     DPapprox_accuracy = accuracy_score(y_test, y_pred)
     DPapprox_f1score = f1_score(y_test, y_pred)
@@ -129,7 +127,6 @@ def testPrivApproxSSLogReg(yTX, XTXy2, X_test, y_test, n, C):
     return (DPapprox_f1score, DPapprox_accuracy,
             DPapprox_fpr, DPapprox_tpr,
             DPapprox_threshold, DPapprox_auc)
-
 
 def testApproxSSLogReg(X, y, X_test, y_test):
     y = 2 * y - 1
@@ -148,7 +145,6 @@ def testApproxSSLogReg(X, y, X_test, y_test):
             public_approx_fpr, public_approx_tpr,
             _, public_approx_auc)
 
-
 def testLogReg(synth_X, synth_y, X_test, y_test):
     lr = LogisticRegression(penalty=None, fit_intercept=False)
     lr.fit(synth_X, synth_y)
@@ -159,7 +155,6 @@ def testLogReg(synth_X, synth_y, X_test, y_test):
     roc_auc = auc(fpr, tpr)
     return (f1score, accuracy, fpr, tpr, threshold, roc_auc)
 
-
 def testPrivLogReg(X, y, X_test, y_test, privatelr):
     privatelr.fit(X, y)
     pred_y, prob_y_1 = privatelr.predict(X_test), privatelr.predict_proba(X_test)[:, 1]
@@ -168,7 +163,6 @@ def testPrivLogReg(X, y, X_test, y_test, privatelr):
     fpr, tpr, threshold = roc_curve(y_test, prob_y_1)
     roc_auc = auc(fpr, tpr)
     return (f1score, accuracy, fpr, tpr, threshold, roc_auc)
-
 
 class ApproxLL():
 
@@ -258,7 +252,6 @@ class ApproxLL():
         roc_auc = auc(fpr, tpr)
         return (roc_auc)
 
-
 class DPApproxLL(ApproxLL):
 
     def __init__(self, ch, yTX, XTXy2, n, penalty, alpha):
@@ -287,7 +280,7 @@ class DPApproxLL(ApproxLL):
 
         x0 = [.0] * len(self.yTX)
 
-        if self.penalty == 'none':
+        if self.penalty == None:
             res = minimize(lambda theta: -self.log_likelihood(theta),
                            x0,
                            method='L-BFGS-B',
