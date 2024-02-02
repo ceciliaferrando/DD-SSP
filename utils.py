@@ -124,78 +124,18 @@ def selectTargetMarginals(cols, target, mode='target-pairs'):
     return out
 
 
-def get_bound_X(one_hot, feature_dict, features_to_encode, target):
-    # differentiates between one-hot encoded data and raw data
+def get_bound_XTX(attribute_dict, target, features_to_encode, one_hot, rescale):
 
-    print("one hot", one_hot)
+    if not one_hot: # then data is binary synthetic data
+        bound_X = np.sqrt(np.sum([max(attribute_dict[f])**2 for f in attribute_dict if f!=target]))
+        bound_XTX = bound_X**2
+    elif one_hot and rescale:
+        bound_XTX = len(attribute_dict.keys()) - 1    #excludes target
+        bound_X = np.sqrt(bound_XTX)
+    elif one_hot and not rescale:
+        print("this option is not covered")
 
-    if one_hot:
-        # drop_first = True
-        sum_squares = 0
-        for feature in feature_dict:
-            if feature in features_to_encode:
-                pox_values = feature_dict[feature][1:]
-                num_options = len(pox_values)
-                sum_squares += (1 - 0) ** 2 / num_options
-            else:
-                pox_values = feature_dict[feature]
-                sum_squares += (max(pox_values) - min(pox_values)) ** 2
-        norm = np.sqrt(sum_squares)
-        print("norm", norm)
-
-        sum_squares = 0
-        for feature in feature_dict:
-            pox_values = feature_dict[feature]
-            sum_squares += (max(pox_values) - min(pox_values)) ** 2
-        norm_old = np.sqrt(sum_squares)
-        print("previous norm", norm_old)
-
-    else:
-        sum_squares = 0
-        for feature in feature_dict:
-            pox_values = feature_dict[feature]
-            sum_squares += (max(pox_values) - min(pox_values)) ** 2
-        norm = np.sqrt(sum_squares)
-    return norm
-
-
-def get_bound_XTX_1h(feature_dict, features_to_encode, feature_dict_1h, target):
-    features = [key for key in feature_dict_1h.keys() if key != target]
-    seen = {}
-    for i in range(len(features)):
-        for j in range(i, len(features)):
-
-            feature_1, feature_2 = features[i], features[j]
-            pair = (feature_1, feature_2)
-
-            if (feature_1, feature_2) not in seen and (feature_2, feature_1) not in seen:
-
-                feature_1, feature_2 = feature_1.split("_")[0], feature_2.split("_")[0]
-
-                R_1 = max(feature_dict[feature_1]) - min(feature_dict[feature_1])
-                R_2 = max(feature_dict[feature_2]) - min(feature_dict[feature_2])
-
-                num_1_options = len(feature_dict[feature_1]) - 1  # drop first
-                num_2_options = len(feature_dict[feature_2]) - 1
-
-                # case 1: none of the two features and 1h encoded
-                if feature_1 not in features_to_encode and feature_2 not in features_to_encode:
-                    seen[pair] = (R_1 * R_2) ** 2
-                # case 2: feature 1 is 1h encoded, feature 2 is not 1h encoded
-                elif feature_1 in features_to_encode and feature_2 not in features_to_encode:
-                    seen[pair] = ((1 * R_2) / num_1_options) ** 2
-                # case 3: feature 2 is 1h encoded, feature 1 is not 1h encoded
-                elif feature_2 in features_to_encode and feature_1 not in features_to_encode:
-                    seen[pair] = ((R_1 * 1) / num_2_options) ** 2
-                # case 4: both features are 1h encoded
-                elif feature_1 in features_to_encode and feature_2 in features_to_encode:
-                    seen[pair] = (1 / (num_1_options * num_2_options)) ** 2
-
-    sum_of_squares = np.sum(list(seen.values()))
-    upperbound_XTX_1h = np.sqrt(sum_of_squares)
-
-    return (upperbound_XTX_1h)
-
+    return bound_XTX, bound_X
 
 def testLogReg(synth_X, synth_y, X_test, y_test):
     lr = LogisticRegression(penalty=None, fit_intercept=False, max_iter=1000, warm_start=True)
@@ -240,6 +180,18 @@ def normalize_minus1_1(X, encoded_features, original_X_range):
             X_out[col] = col_1s
 
     return X_out
+
+def theta_inverse_mapping(theta, original_ranges, training_columns):
+
+    theta_mapped_back = np.zeros((training_columns,))
+
+    for j, col in enumerate(training_columns):
+        colmin = np.min(original_ranges[col])
+        colmax = np.max(original_ranges[col])
+        theta_j_mapped_back = (theta[j] + 1)/2 * (colmax-colmin) + colmin
+        theta_mapped_back[j] = theta_j_mapped_back
+
+    return theta_mapped_back
 
 # AIM SYNTHESIZER
 
@@ -320,11 +272,9 @@ def get_ZTZ(W, attribute_dict, columns, features_to_encode, rescale):
                 if attr_a_orig not in features_to_encode:
                     a_range_min, a_range_max = min(a_values), max(a_values)
                     a_values = [(1 -(-1)) * ((val - a_range_min) / (a_range_max - a_range_min)) - 1 for val in a_values]
-                    print("A range", a_values)
                 if attr_b_orig not in features_to_encode:
                     b_range_min, b_range_max = min(b_values), max(b_values)
                     b_values = [(1 -(-1)) * ((val - b_range_min) / (b_range_max - b_range_min)) - 1 for val in b_values]
-                    print("B range", b_values)
 
             # case 1: a and b are both ordinal
             if attr_a_orig not in features_to_encode and attr_b_orig not in features_to_encode:
