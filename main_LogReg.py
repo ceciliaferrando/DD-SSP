@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
     parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
-    parser.add_argument('--method', help='Method to be used', type=str, default='public-approx-ss',
+    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
     parser.add_argument('--num_experiments', type=int, default=1)
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     rescale = args.rescale
     print(f"one hot {one_hot}, rescale {rescale}")
     
-    model_size = 100  # FOR AIM
+    model_size = 40  # FOR AIM
     max_iters = 1000   # FOR AIM
 
     # Setup hyper-parameters for the runs
@@ -181,7 +181,6 @@ if __name__ == "__main__":
                 if one_hot:
                     encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
                     original_X_range = {feature: [0, domain[feature]] for feature in feature_dict.keys()}
-                    original_y_range = {target: [0, domain[target]]}
                     X_pub = normalize_minus1_1(X, encoded_features, original_X_range)
                     X_test_pub = normalize_minus1_1(X_test, encoded_features, original_X_range)
                 else:
@@ -205,35 +204,9 @@ if __name__ == "__main__":
                                 seed, n_limit, train_ratio, None, epsilon])
                 pbar.update(1)
 
-            elif method == 'public-approx-ss':
-                # public approximate SS baseline
-                (_, public_approx_accuracy,
-                 public_approx_fpr, public_approx_tpr,
-                 public_approx_threshold, public_approx_auc) = testApproxSSLogReg(X, y, X_test, y_test)
-                res_out.append([dataset, method, public_approx_auc, None, public_approx_accuracy, t,
-                                seed, n_limit, train_ratio, None, epsilon])
-                pbar.update(1)
-
             elif method == 'aim':
                 # add the same regularization as genobjpert
                 n, d = X.shape
-
-                print(f"N = {n}")
-                print(f"epsilon = {epsilon}")
-                print(f"delta = {delta}")
-
-                # maxvals = np.array(np.amax(X.to_numpy(), axis = 0)).reshape(-1,1)
-                # max_row_norm = np.sqrt(np.sum([a**2 for a in maxvals]))
-
-                _, max_row_norm = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot, rescale)
-                zeta = max_row_norm
-                lmda = smooth_const = max_row_norm ** 2 / 4
-
-                # BigDelta = 2 * lmda / epsilon
-                #
-                # reg_const = BigDelta / (2 * n)
-                # inv_reg_const = (2 * n) / BigDelta
-                # print(f"inv_reg_const: {inv_reg_const}, Delta: {BigDelta}")
 
                 # AIM sufficient statistics method
                 # Instantiate and train pgm synthesizer (AIM)
@@ -266,7 +239,11 @@ if __name__ == "__main__":
                 XTXy2 = ZTZ.loc[training_columns, training_columns]
                 XTy = ZTZ.loc[training_columns, target]
 
-                print(len(X_test.columns))
+                if one_hot:
+                    encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
+                    original_X_range = {feature: [0, domain[feature]] for feature in feature_dict.keys()}
+                    original_y_range = {target: [0, domain[target]]}
+                    X_test = normalize_minus1_1(X_test, encoded_features, original_X_range)
 
                 (DPapprox_f1score, DPapprox_accuracy,
                  DPapprox_fpr, DPapprox_tpr,
@@ -274,13 +251,12 @@ if __name__ == "__main__":
                 res_out.append([dataset, 'aim-ss', DPapprox_auc, DPapprox_f1score, DPapprox_accuracy, t,
                                 seed, n_limit, train_ratio, None, epsilon])
                 print("DPapprox_auc", DPapprox_auc)
+\\
 
                 ######## AIM Synthetic Data #########
                 # # sample n rows using the synth data mechanism
                 synth = pgm_synth.synth.df
-                # synth = pd.read_csv(f"/Users/ceciliaferrando/Documents/UMASS/RESEARCH/DPsynthesisML/dp-reg/aws/logreg_results/{dataset}_logreg/{epsilon}_{t}.csv")
                 synth_X, synth_y = synth.loc[:, synth.columns != target], synth.loc[:, synth.columns == target]
-                print("synth y")
 
                 # Here we handle the case in which we have to one-hot encode the columns
                 if one_hot:
