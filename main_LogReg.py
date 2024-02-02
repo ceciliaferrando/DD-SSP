@@ -251,7 +251,6 @@ if __name__ == "__main__":
                 res_out.append([dataset, 'aim-ss', DPapprox_auc, DPapprox_f1score, DPapprox_accuracy, t,
                                 seed, n_limit, train_ratio, None, epsilon])
                 print("DPapprox_auc", DPapprox_auc)
-\\
 
                 ######## AIM Synthetic Data #########
                 # # sample n rows using the synth data mechanism
