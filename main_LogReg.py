@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
     parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
-    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
+    parser.add_argument('--method', help='Method to be used', type=str, default='public-approx-ss',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
     parser.add_argument('--num_experiments', type=int, default=1)
@@ -196,10 +196,18 @@ if __name__ == "__main__":
                 pbar.update(1)
 
             elif method == 'public-approx-ss':
+                if one_hot:
+                    encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
+                    original_X_range = {feature: [0, domain[feature]] for feature in feature_dict.keys()}
+                    X_pub = normalize_minus1_1(X, encoded_features, original_X_range)
+                    X_test_pub = normalize_minus1_1(X_test, encoded_features, original_X_range)
+                else:
+                    X_pub = copy.deepcopy(X)
+                    X_test_pub = copy.deepcopy(X_test)
                 # public approximate SS baseline
                 (_, public_approx_accuracy,
                  public_approx_fpr, public_approx_tpr,
-                 public_approx_threshold, public_approx_auc) = testApproxSSLogReg(X, y, X_test, y_test)
+                 public_approx_threshold, public_approx_auc) = testApproxSSLogReg(X_pub, y, X_test_pub, y_test)
                 res_out.append([dataset, method, public_approx_auc, None, public_approx_accuracy, t,
                                 seed, n_limit, train_ratio, None, epsilon])
                 pbar.update(1)
@@ -290,7 +298,6 @@ if __name__ == "__main__":
                 if one_hot:
                     encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
                     original_X_range = {feature: [0, domain[feature]] for feature in feature_dict.keys()}
-                    original_y_range = {target: [0, domain[target]]}
                     synth_X_ordered = normalize_minus1_1(synth_X_ordered, encoded_features, original_X_range)
                     X_test_aim = normalize_minus1_1(X_test_aim, encoded_features, original_X_range)
 
