@@ -43,14 +43,13 @@ import pickle
 from utils import *
 from utils_LogReg import *
 from methods_LogReg import *
-from dpquery_chebyshev import Chebyshev, phi_logit
 
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
-    parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
-    parser.add_argument('--method', help='Method to be used', type=str, default='public',
+    parser.add_argument('--dataset', help='Dataset', type=str, default='ACSincome')
+    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
     parser.add_argument('--num_experiments', type=int, default=1)
@@ -60,8 +59,6 @@ if __name__ == "__main__":
     parser.add_argument('--iterate_over_gamma', action=argparse.BooleanOptionalAction,
                         default=False)
     parser.add_argument('--one_hot', action=argparse.BooleanOptionalAction,
-                        default=True)
-    parser.add_argument('--rescale', action=argparse.BooleanOptionalAction,
                         default=True)
     args = parser.parse_args()
     
@@ -75,7 +72,7 @@ if __name__ == "__main__":
     train_ratio = args.train_ratio
     iterate_over_gamma = args.iterate_over_gamma
     one_hot = args.one_hot
-    rescale = args.rescale
+    rescale = True
     print(f"one hot {one_hot}, rescale {rescale}")
     
     model_size = 40  # FOR AIM
@@ -154,14 +151,18 @@ if __name__ == "__main__":
         # The trick by which we remove the columns with the same value is to see which columns have a standard
         # deviation equal to 0 or not
         X_ohe = pd.get_dummies(X, columns=cols_to_dummy, drop_first=True)
+
+        colname_map = {col: col.split(".")[0] for col in X_ohe.columns}
+        X_ohe.rename(columns=colname_map, inplace=True)
         X_ohe.drop(X_ohe.std()[X_ohe.std() == 0].index, axis=1, inplace=True)
         training_columns = X_ohe.columns
-        print(training_columns)
 
         # Now we do the one-hot encoding for the test set. Once we do the one-hot encoding:
         # (1) we need to remove the columns that are not in the training columns
         # (2) we need to add with all zeros the columns that are in the training data but not in the test data
         X_test_ohe = pd.get_dummies(X_test, columns=cols_to_dummy, drop_first=True)
+        X_test_ohe.rename(columns=colname_map, inplace=True)
+        X_test_ohe = X_test_ohe.rename({col: col.split(".")[0] for col in X_test_ohe.columns})
         X_test_ohe = add_and_subsets_cols_to_test_set(X_test_ohe, training_columns)
 
         assert set(X_ohe.columns) == set(X_test_ohe.columns)
@@ -216,7 +217,7 @@ if __name__ == "__main__":
                 #     W = pickle.load(handle)
 
                 ######## AIM SS #########
-                encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
+                encoded_features = [col.split(".")[0] for col in X if col.split("_")[0] in cols_to_dummy]
 
                 (DPapprox_f1score, DPapprox_accuracy,
                  DPapprox_fpr, DPapprox_tpr,

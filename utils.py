@@ -159,22 +159,28 @@ def testLogRegCustom(synth_X, synth_y, X_test, y_test, InvC):
     return (f1score, accuracy, fpr, tpr, threshold, roc_auc)
 
 
-def normalize_minus1_1(X, encoded_features, original_X_range):
+def normalize_minus1_1(X, attribute_dict, encoded_features):
+    original_ranges = {attr: [min(attribute_dict[attr]), max(attribute_dict[attr])]
+                       for attr in attribute_dict.keys()}
+
+    print(original_ranges)
     X_out = pd.DataFrame()
 
     for col in X.columns:
+
         # this is in case the test set has columns of zeros
         if len(set(X[col])) == 1:
+            print(X_out.columns)
             X_out[col] = X[col]
 
-        # if the column corresponds to a categorical feature that has beenn one-hot encoded, keep it in domain [0, 1]
-        elif col in encoded_features:
+        # if the column corresponds to a categorical feature that has been one-hot encoded, keep it in domain [0, 1]
+        if col in encoded_features:
             X_out[col] = X[col]
 
         # for all other features, rescale to [-1, 1]
         else:
-            colmin = original_X_range[col][0]
-            colmax = original_X_range[col][1]
+            colmin = original_ranges[col][0]
+            colmax = original_ranges[col][1]
 
             col_1s = (1 - (-1)) * ((X[col] - colmin) / (colmax - colmin)) - 1
             X_out[col] = col_1s
@@ -243,6 +249,46 @@ def expand_W(W, attribute_dict):
     return W_expanded
 
 
+class Chebyshev:
+    """
+    Chebyshev(a, b, n, func)
+    Given a function func, lower and upper limits of the interval [a,b],
+    and maximum degree n, this class computes a Chebyshev approximation
+    of the function.
+    Method eval(x) yields the approximated function value.
+    """
+
+    def __init__(self, a, b, n, func):
+        self.a = a
+        self.b = b
+        self.func = func
+
+        bma = 0.5 * (b - a)
+        bpa = 0.5 * (b + a)
+        f = [func(math.cos(math.pi * (k + 0.5) / n) * bma + bpa) for k in range(n)]
+        fac = 2.0 / n
+        self.c = [fac * sum([f[k] * math.cos(math.pi * j * (k + 0.5) / n)
+                             for k in range(n)]) for j in range(n)]
+
+    def eval(self, x):
+        a, b = self.a, self.b
+        # assert(a <= x <= b)
+        y = (2.0 * x - a - b) * (1.0 / (b - a))
+        y2 = 2.0 * y
+        (d, dd) = (self.c[-1], 0)  # Special case first step for efficiency
+        for cj in self.c[-2:0:-1]:  # Clenshaw's recurrence
+            (d, dd) = (y2 * d - dd + cj, d)
+        return y * d - dd + 0.5 * self.c[0]  # Last step is different
+
+
+def phi_logit(x):
+    return -math.log(1 + math.exp(-x))
+
+def logit_2(x):
+    return math.log(1 + math.exp(x))
+
+
+
 def get_ZTZ(W, attribute_dict, columns, features_to_encode, rescale):
     """
         W: [dict] marginal tables in the form {("feature_A", "feature_B"); m_A x m_B np.array of counts, ...}
@@ -286,19 +332,19 @@ def get_ZTZ(W, attribute_dict, columns, features_to_encode, rescale):
             # case 2.1: a is ordinal, b is encoded
             elif attr_a_orig not in features_to_encode and attr_b_orig in features_to_encode:
                 mu_ab = W[(attr_a_orig, attr_b_orig)]
-                t = int(attr_b.split("_")[-1])  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
+                t = int(float(attr_b.split("_")[-1]))  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
                 ZTZ[attr_a][attr_b] = np.sum(np.multiply(mu_ab[:, t], a_values))
 
             # case 2.2: a is encoded, b is ordinal
             elif attr_a_orig in features_to_encode and attr_b_orig not in features_to_encode:
                 mu_ab = W[(attr_a_orig, attr_b_orig)]
-                s = int(attr_a.split("_")[-1])  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
+                s = int(float(attr_a.split("_")[-1]))  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
                 ZTZ[attr_a][attr_b] = np.sum(np.multiply(mu_ab[s, :], b_values))
 
             # case 3: a and b are both encoded
             elif attr_a_orig in features_to_encode and attr_b_orig in features_to_encode:
-                s = int(attr_a.split("_")[-1])  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
-                t = int(attr_b.split("_")[-1])  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
+                s = int(float(attr_a.split("_")[-1]))  # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
+                t = int(float(attr_b.split("_")[-1])) # get level number ***** ASSUMES LEVELS CORRESPOND TO THE NAMES ******
                 mu_ab = W[(attr_a_orig, attr_b_orig)]
                 ZTZ[attr_a][attr_b] = mu_ab[s, t]
 
