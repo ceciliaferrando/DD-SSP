@@ -27,13 +27,14 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 import argparse
 from tqdm.auto import tqdm
 
+from methods_LinReg import *
 from utils import *
 from utils_LinReg import *
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
-    parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
+    parser.add_argument('--dataset', help='Dataset', type=str, default='ACSincome-LIN')
     parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                         choices=['public', 'adassp', 'aim'])
     parser.add_argument('--delta', type=float, default=1e-5)
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     if len(df) > n_limit:
         df = df[:n_limit]
     X, y, X_test, y_test = splitdf(df, target, train_ratio)
-    X_aim = X.copy(deep=True)
+    pgm_train_df = X.join(y)
 
     # Create dictionary with attribute levels
     attribute_dict = {}
@@ -168,19 +169,8 @@ if __name__ == "__main__":
 
             if method == 'public':
 
-                if not one_hot:
-                    theta_public, mse_public, r2_public = public_linear_regression(X, y, X_test, y_test)
-
-                else:
-                    if rescale == True:
-                        X_public = normalize_minus1_1(X, encoded_features, original_ranges)
-                        X_test_public = normalize_minus1_1(X_test, encoded_features, original_ranges)
-                        y_adassp = normalize_minus1_1(y, encoded_features, original_ranges)
-                    else:
-                        X_public = copy.deepcopy(X)
-                        X_test_public = copy.deepcopy(X_test)
-                        y_adassp = copy.deepcopy(y)
-                    theta_public, mse_public, r2_public = public_linear_regression(X_public, y, X_test_public, y_test)
+                theta_public, mse_public, r2_public = public_method(X, y, X_test, y_test,
+                                                                    cols_to_dummy, attribute_dict, one_hot)
 
                 res_out.append([dataset, method, mse_public, r2_public, t, seed,
                                 n_limit, train_ratio, None, epsilon, delta])
@@ -192,91 +182,33 @@ if __name__ == "__main__":
                 # AIM sufficient statistics method
                 # Instantiate and train pgm synthesizer (AIM), generate synthetic data
 
-                pgm_train_df = X_aim.join(y)
-                print(f"pgm_train_df columns: {pgm_train_df.columns}")
-                pgm_dataset = Dataset(pgm_train_df, domain)
-                mrgs = selectTargetMarginals(df.columns, target, mode=marginals_pgm)
-                mrgs_wkld = Workload((mrg, sparse.identity) for mrg in mrgs)
-                pgm_synth = PGMsynthesizer(pgm_dataset, epsilon, delta, mrgs_wkld, model_size, max_iters, len(X))
-                pgm_synth.aimsynthesizer()
-                ans_wkld = pgm_synth.ans_wkld
-                W = {key: ans_wkld[key].__dict__['values'] for key in ans_wkld}  # DP query answers
+                n, d = X.shape
 
-                with open('W.pickle', 'wb') as handle:
-                    pickle.dump(W, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-                # DIRECT SUFF STATS
-                # estimate sufficient statistics from W
+                # get marginal tables and synthetic data for training
+                W, synth_X, synth_y = get_aim_W_and_data(pgm_train_df, domain, target, marginals_pgm,
+                                                         epsilon, delta, model_size, max_iters, n)
                 W_expanded = expand_W(W, attribute_dict)
+                W_filename = f'{outdir}{dataset}_{method}_{epsilon}_{t}_{num_experiments}exps_{n_limit}limit_' \
+                             f'{seed}seed_W.pickle'
+                with open(W_filename, 'wb') as handle:
+                    pickle.dump(W, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                with open(W_filename, 'rb') as handle:
+                    W_load = pickle.load(handle)
 
-                ######## AIM SS #########
-                all_attributes_expanded = training_columns.append(pd.Index([target]))
-                ZTZ = get_ZTZ(W_expanded, attribute_dict, all_attributes_expanded, cols_to_dummy, rescale=rescale)
-                XTX = ZTZ.loc[training_columns, training_columns]
-                XTy = ZTZ.loc[training_columns, target]
+                encoded_features = [col.split(".")[0] for col in X if col.split("_")[0] in cols_to_dummy]
 
-                # get estimator
-                y_test = normalize_minus1_1(y_test, encoded_features, original_ranges)
-                theta_aim = np.linalg.solve(XTX, XTy)
-                y_pred = np.dot(X_test, theta_aim)
-                mse_aim = mean_squared_error(y_test, y_pred)
-                r2_aim = r2_score(y_test, y_pred)
+                theta_aim, mse_aim, r2_aim = dp_query_ss_method(W_expanded, attribute_dict, training_columns,
+                                                       encoded_features, target, domain, n,
+                                                        cols_to_dummy, one_hot, X_test, y_test)
 
-                print(f"mse aim ss {mse_aim}")
-
-                res_out.append([dataset, "aim-ss", mse_aim, r2_aim, t, seed,
-                                n_limit, train_ratio, None, epsilon, delta])
+                res_out.append([dataset, "aim-ss", mse_aim, r2_aim, t, seed, n_limit, train_ratio, None, epsilon, delta])
                 pbar.update(1)
 
-                # sample n rows using the synth data mechanism
-                synth = pgm_synth.synth.df
-                synth.to_csv(outdir + str(epsilon) + "_" + str(t) + ".csv")
-                synth_X, synth_y = synth.loc[:, synth.columns != target], synth.loc[:, synth.columns == target]
-                print(synth_y)
 
-                # Here we handle the case in which we have to one-hot encode the columns the AIM data
-                if one_hot:
-                    # As above we drop the first column in Pandas to avoid multi-collinearity
-                    # issues in the train data. We then check whether there is a column with all 0 or all 1
-                    # and we remove it. The trick by which we remove the columns with the same value is to see
-                    # which columns have a standard deviation equal to 0 or not
-                    # Here we set drop_first = False because we don't know which level for the synthetic AIM data would
-                    # be the first. Since we are enforcing the columns to be the same as the training data above,
-                    # the filtering at the column level later should get rid of collinearity issues.
-                    synth_X_ohe = pd.get_dummies(synth_X, columns=cols_to_dummy, drop_first=False)
-                    synth_X_ohe.drop(synth_X_ohe.std()[synth_X_ohe.std() == 0].index, axis=1, inplace=True)
-
-                    # Now we only select the columns that are present in the train set
-                    synth_X_ohe = synth_X_ohe[[el for el in synth_X_ohe.columns if el in training_columns]]
-                    aim_columns = synth_X_ohe.columns
-
-                    # Now we also modify the X_test so that we are sure that X_test also has the same columns as
-                    # the synthetic version of the data generated by AIM.
-                    X_test_aim = add_and_subsets_cols_to_test_set(X_test, aim_columns)
-                    synth_X = synth_X_ohe.copy()
-
-                else:
-                    X_test_aim = X_test
-
-                synth_X_ordered = pd.DataFrame()
-
-                for col in X_test_aim.columns:
-                    synth_X_ordered[col] = synth_X[col]
-
-                for i, col in enumerate(synth_X_ordered.columns):
-                    print(col, X_test_aim.columns[i])
-                    assert col == X_test_aim.columns[i]
-
-                if not one_hot:
-                    theta_aim_synth, mse_aim_synth, r2_aim_synth = public_linear_regression(synth_X_ordered, synth_y,
-                                                                                            X_test_aim, y_test)
-                else:
-                    synth_X_ordered = normalize_minus1_1(synth_X_ordered, encoded_features, original_ranges)
-                    X_test_aim = normalize_minus1_1(X_test_aim, encoded_features, original_ranges)
-                    synth_y = normalize_minus1_1(synth_y, encoded_features, original_ranges)
-                    y_test = normalize_minus1_1(y_test, encoded_features, original_ranges)
-                    theta_aim_synth, mse_aim_synth, r2_aim_synth = public_linear_regression(synth_X_ordered, synth_y,
-                                                                                            X_test_aim, y_test)
+                ####### AIM SYNTHETIC DATA
+                theta_aim_synth, mse_aim_synth, r2_aim_synth = dp_query_synth_data_method(synth_X, synth_y,
+                                                                    training_columns, attribute_dict, cols_to_dummy,
+                                                                    encoded_features, X_test, y_test, one_hot)
 
                 print(f"mse_aim_synth, {mse_aim_synth}")
                 res_out.append([dataset, method, mse_aim_synth, r2_aim_synth, t, seed,
