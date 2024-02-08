@@ -44,6 +44,79 @@ import warnings
 
 ########## GENERAL UTILS ################################################################
 
+def preprocess_data(dataset, target_dict, n_limit, train_ratio, one_hot):
+    """
+    Preprocesses the data for further analysis.
+
+    Parameters:
+        dataset (str): Name of the dataset.
+        target_dict (dict): Dictionary containing target information for datasets.
+        num_experiments (int): Number of experiments to run.
+        method (str): Method for the experiment.
+        epsilon_vec (list): List of epsilon values.
+        n_limit (int): Limit on the number of data points.
+        train_ratio (float): Ratio of training data.
+        one_hot (bool): Whether to perform one-hot encoding. Default is True.
+
+    Returns:
+        None
+    """
+
+    # Import the data
+    csv_path = '../hd-datasets-master/clean/' + dataset + '.csv'
+    meta_path = '../hd-datasets-master/clean/' + dataset + '-domain.json'
+    data = Dataset.load(csv_path, meta_path)  # for PGM
+    domain = data.domain
+    target = target_dict[dataset]
+
+    # Load the data
+    df = pd.read_csv(csv_path)
+
+    # Split the DF
+    if len(df) > n_limit:
+        df = df[:n_limit]
+    X, y, X_test, y_test = splitdf(df, target, train_ratio)
+    pgm_train_df = X.join(y)
+
+    # Create dictionary with attribute levels
+    attribute_dict = {}
+    for col in df:
+        unique_values = list(range(domain[col]))
+        attribute_dict[col] = unique_values
+    print(attribute_dict)
+
+    # If one_hot is active, then we one hot both the train set and the test set.
+    cols_to_dummy, training_columns = [], None
+    if one_hot:
+        print(f"one-hot encoding {dataset}...")
+        cols_to_dummy = get_cols_to_dummy(dataset)
+        X_ohe = pd.get_dummies(X, columns=cols_to_dummy, drop_first=True)
+        X_ohe.drop(X_ohe.std()[X_ohe.std() == 0].index, axis=1, inplace=True)
+        for col in X_ohe:
+            if col.endswith(".0"):
+                X_ohe.rename(columns={col: col.split(".0")[0]}, inplace=True)
+        training_columns = X_ohe.columns
+        X_test_ohe = pd.get_dummies(X_test, columns=cols_to_dummy, drop_first=True)
+        X_test_ohe = add_and_subsets_cols_to_test_set(X_test_ohe, training_columns)
+        for col in X_test_ohe:
+            if col.endswith(".0"):
+                X_test_ohe.rename(columns={col: col.split(".0")[0]}, inplace=True)
+        assert set(X_ohe.columns) == set(X_test_ohe.columns)
+        X = X_ohe.copy(deep=True)
+        print("X after 1h:", X)
+        X_test = X_test_ohe.copy()
+
+    encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
+    original_ranges = {feature: [0, domain[feature]] for feature in attribute_dict.keys()}
+
+    if one_hot:  # rescale
+        X = normalize_minus1_1(X, attribute_dict, encoded_features)
+        X_test = normalize_minus1_1(X_test, attribute_dict, encoded_features)
+        y = normalize_minus1_1(y, attribute_dict, encoded_features)
+        y_test = normalize_minus1_1(y_test, attribute_dict, encoded_features)
+
+    return X, X_test, y, y_test, pgm_train_df, domain, target, attribute_dict, cols_to_dummy, encoded_features, original_ranges, training_columns
+
 
 def splitdf(df, target, train_ratio):
     n = len(df)
@@ -64,7 +137,7 @@ def get_cols_to_dummy(dataset):
     if dataset == "adult":
         cols_to_dummy = ['workclass', 'education', 'marital-status', 'occupation',
                          'relationship', 'race', 'native-country']
-    elif dataset == "ACSincome":
+    elif dataset == "ACSincome" or "ACSincome-LIN":
         cols_to_dummy = ['COW', 'MAR', 'RELP', 'RAC1P']
     elif dataset == "ACSemployment":
         cols_to_dummy = ['MAR', 'RELP', 'CIT', 'MIL', 'ANC',
@@ -163,14 +236,12 @@ def normalize_minus1_1(X, attribute_dict, encoded_features):
     original_ranges = {attr: [min(attribute_dict[attr]), max(attribute_dict[attr])]
                        for attr in attribute_dict.keys()}
 
-    print(original_ranges)
     X_out = pd.DataFrame()
 
     for col in X.columns:
 
         # this is in case the test set has columns of zeros
         if len(set(X[col])) == 1:
-            print(X_out.columns)
             X_out[col] = X[col]
 
         # if the column corresponds to a categorical feature that has been one-hot encoded, keep it in domain [0, 1]

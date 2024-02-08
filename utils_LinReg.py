@@ -41,63 +41,6 @@ def public_linear_regression(X, y, X_test, y_test):
     return theta_public, mse_score_public, r2_score_public
 
 
-def AdaSSP_linear_regression(X, y, epsilon, delta, rho, bound_X, bound_y, bound_XTX, X_test, y_test, original_y_range,
-                             rescale):
-    """Returns DP linear regression model and metrics using AdaSSP. AdaSSP is described in Algorithm 2 of
-        https://arxiv.org/pdf/1803.02596.pdf.
-
-    Args:
-        X: df feature vectors
-        y: df of labels
-        epsilon: model needs to meet (epsilon, delta)-DP.
-        delta: model needs to meet (epsilon, delta)-DP.
-        rho: failure probability, default of 0.05 is from original paper
-        bound_X, bound y: bounds on the L2 sensitivity
-        bound_XTX: bound on the sensitivity of XTX (is data is one hot encoded, XTX is sparser, sensitivity must be adapted)
-        X_test, y_test: test data for evaluation
-
-    Returns:
-        theta_dp: regression coefficients
-        mse_dp: mean squared error
-        r2_dp: r2 score
-    """
-
-    n, d = X.shape
-
-    XTX = np.dot(X.T, X)
-    XTy = np.dot(X.T, y).flatten()
-
-    eigen_min = max(0, np.amin(np.linalg.eigvals(XTX)))
-    z = np.random.normal(0, 1, size=1)
-    sensitivity = np.sqrt(np.log(6 / delta)) / (epsilon / 3)
-    eigen_min_dp = max(0,
-                       eigen_min + sensitivity * (bound_XTX) * z -
-                       (bound_XTX) * np.log(6 / delta) / (epsilon / 3))
-    lambda_dp = max(0,
-                    np.sqrt(d * np.log(6 / delta) * np.log(2 * (d ** 2) / rho)) * (bound_XTX) /
-                    (epsilon / 3) - eigen_min_dp)
-
-    tri = np.triu(np.random.normal(0, 1, (d, d)))
-    Zsym = tri + tri.T - np.diag(np.diag(tri))
-    XTX_dp = XTX + sensitivity * (bound_XTX) * Zsym
-    print("epsilon =", epsilon, "XTX_dp noise variance", sensitivity * (bound_XTX))
-
-    z = np.random.normal(0, 1, size=(d,))
-    XTy_dp = XTy + sensitivity * bound_X * bound_y * z
-    XTX_dp_reg = XTX_dp + lambda_dp * np.eye(d)
-
-    theta_dp = np.linalg.solve(XTX_dp_reg, XTy_dp)
-
-    y_pred = np.dot(X_test, theta_dp)
-
-    # scale y pred back to original domain if rescale needed. Linear rescaling.
-    if rescale:
-        y_pred = (y_pred - (-1)) / (+1 - (-1)) * (original_y_range[1] - original_y_range[0]) + original_y_range[0]
-        y_pred = y_pred.astype(int)
-    mse_dp = mean_squared_error(y_test, y_pred)
-    r2_dp = r2_score(y_test, y_pred)
-
-    return theta_dp, mse_dp, r2_dp
 
 
 def splitdf(df, target, train_ratio):
@@ -512,28 +455,6 @@ def get_bound_XTX_1h(feature_dict, features_to_encode, feature_dict_1h, target):
     upperbound_XTX_1h = np.sqrt(sum_of_squares)
 
     return (upperbound_XTX_1h)
-
-
-def normalize_minus1_1(X, encoded_features, original_X_range):
-    X_out = pd.DataFrame()
-
-    for col in X.columns:
-        # this is in case the test set has columns of zeros
-        if len(set(X[col])) == 1:
-            X_out[col] = X[col]
-
-        # if the column corresponds to a categorical feature that has beenn one-hot encoded, keep it in domain [0, 1]
-        elif col in encoded_features:
-            X_out[col] = X[col]
-
-        # for all other features, rescale to [-1, 1]
-        else:
-            colmin = original_X_range[col][0]
-            colmax = original_X_range[col][1]
-            col_1s = 2 * ((X[col] - colmin) / (colmax - colmin)) - 1
-            X_out[col] = col_1s
-
-    return X_out
 
 
 def data_exploration(dataset, df, ncols=5):
