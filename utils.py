@@ -86,7 +86,7 @@ def preprocess_data(dataset, target_dict, n_limit, train_ratio, one_hot):
     print(attribute_dict)
 
     # If one_hot is active, then we one hot both the train set and the test set.
-    cols_to_dummy, training_columns = [], None
+    cols_to_dummy, training_columns = [], X.columns
     if one_hot:
         print(f"one-hot encoding {dataset}...")
         cols_to_dummy = get_cols_to_dummy(dataset)
@@ -105,6 +105,7 @@ def preprocess_data(dataset, target_dict, n_limit, train_ratio, one_hot):
         X = X_ohe.copy(deep=True)
         print("X after 1h:", X)
         X_test = X_test_ohe.copy()
+
 
     encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
     original_ranges = {feature: [0, domain[feature]] for feature in attribute_dict.keys()}
@@ -197,16 +198,14 @@ def selectTargetMarginals(cols, target, mode='target-pairs'):
     return out
 
 
-def get_bound_XTX(attribute_dict, target, features_to_encode, one_hot, rescale):
+def get_bound_XTX(attribute_dict, target, features_to_encode, one_hot):
 
     if not one_hot: # then data is binary synthetic data
         bound_X = np.sqrt(np.sum([max(attribute_dict[f])**2 for f in attribute_dict if f!=target]))
         bound_XTX = bound_X**2
-    elif one_hot and rescale:
+    elif one_hot:
         bound_XTX = len(attribute_dict.keys()) - 1    #excludes target
         bound_X = np.sqrt(bound_XTX)
-    elif one_hot and not rescale:
-        print("this option is not covered")
 
     return bound_XTX, bound_X
 
@@ -357,7 +356,6 @@ def phi_logit(x):
 
 def logit_2(x):
     return math.log(1 + math.exp(x))
-
 
 
 def get_ZTZ(W, attribute_dict, columns, features_to_encode, rescale):

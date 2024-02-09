@@ -34,7 +34,7 @@ from utils_LinReg import *
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
-    parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
+    parser.add_argument('--dataset', help='Dataset', type=str, default='linregbinary')
     parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                         choices=['public', 'adassp', 'aim'])
     parser.add_argument('--delta', type=float, default=1e-5)
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     parser.add_argument('--iterate_over_gamma', action=argparse.BooleanOptionalAction,
                         default=False)
     parser.add_argument('--one_hot', action=argparse.BooleanOptionalAction,
-                        default=True)
+                        default=False)
     args = parser.parse_args()
 
     dataset = args.dataset
@@ -56,7 +56,8 @@ if __name__ == "__main__":
     n_limit = args.n_limit
     train_ratio = args.train_ratio
     one_hot = args.one_hot
-    rescale = True
+    print(one_hot)
+    rescale = one_hot # if one hot encoding is active, always rescale features
 
     marginals_pgm = 'all-pairs'
     target_dict = {'adult': 'education-num', 'ACSincome-LIN': 'PINCP',
@@ -79,6 +80,14 @@ if __name__ == "__main__":
                                                                          n_limit, train_ratio, one_hot)
 
 
+    # print("X", X)
+    # print("\n")
+    # print("y", y)
+    # print("\n")
+    # print("X_test", X_test)
+    # print("TARGET:", target)
+
+
     # Set up output and pbar
     res_out = []
     col_out = ['dataset', 'method', 'mse', 'r2', 'experiment_n', 'seed', 'n_limit', 'train_ratio',
@@ -94,6 +103,11 @@ if __name__ == "__main__":
             np.random.seed(seed + t)
 
             if method == 'public':
+
+                # X_public = copy.deepcopy(X)
+                # X_test_public = copy.deepcopy(X_test)
+                # y_public = copy.deepcopy(y)
+                # y_test_public = copy.deepcopy(y_test)
 
                 theta_public, mse_public, r2_public = public_method(X, y, X_test, y_test)
 
@@ -119,6 +133,8 @@ if __name__ == "__main__":
                              f'{seed}seed_W.pickle'
                 with open(W_filename, 'wb') as handle:
                     pickle.dump(W, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+                print(training_columns)
 
                 theta_aim, mse_aim, r2_aim = dp_query_ss_method(W_expanded, attribute_dict, training_columns, target,
                                                                 cols_to_dummy, one_hot, X_test, y_test)
@@ -157,8 +173,8 @@ if __name__ == "__main__":
                 #     X_test_adassp = copy.deepcopy(X_test)
                 #     y_adassp = copy.deepcopy(y)
 
-                bound_XTX, bound_X = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot, rescale)
-                bound_y = np.abs(np.max(attribute_dict[target]))
+                bound_XTX, bound_X = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot)
+                bound_y = 1 if one_hot else np.abs(np.max(attribute_dict[target]))
                 print(f"bound_y {bound_y}")
                 print(f"bound_XTX {bound_XTX}")
                 print(f"bound_X {bound_X}")
@@ -166,10 +182,7 @@ if __name__ == "__main__":
                 # adassp method
                 theta_adassp, mse_adassp, r2_adassp = AdaSSP_linear_regression(X, y, epsilon, delta,
                                                                                rho, bound_X, bound_y, bound_XTX,
-                                                                               X_test, y_test,
-                                                                               [min(attribute_dict[target]),
-                                                                                max(attribute_dict[target])],
-                                                                               rescale=rescale)
+                                                                               X_test, y_test)
 
                 print(f"theta adassp: {theta_adassp}")
                 print("mse adassp", mse_adassp)

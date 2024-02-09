@@ -34,7 +34,18 @@ from utils_LinReg import *
 
 def public_method(X, y, X_test, y_test):
 
-    theta_public, mse_public, r2_public = public_linear_regression(X, y, X_test, y_test)
+    # XTX = np.dot(X.T, X)
+    # XTy = np.dot(X.T, y)
+    # theta_public = np.linalg.solve(XTX, XTy)
+    # y_pred = np.dot(X_test, theta_public)
+    # mse_public = mean_squared_error(y_test, y_pred)
+
+    regr = LinearRegression(fit_intercept=False)
+    regr.fit(X.values, y.values)
+    theta_public = regr.coef_
+    y_pred = regr.predict(X_test.values)
+    mse_public = mean_squared_error(y_test, y_pred)
+    r2_public = r2_score(y_test, y_pred)
 
     return (theta_public, mse_public, r2_public)
 
@@ -59,16 +70,12 @@ def dp_query_ss_method(W_expanded, attribute_dict, training_columns, target,
     XTX = ZTZ.loc[training_columns, training_columns]
     XTy = ZTZ.loc[training_columns, target]
 
-    print(XTX)
-    print(ZTZ)
-
     for i,col in enumerate(XTX.columns):
-        print(col, X_test.columns[i])
         assert col == X_test.columns[i]
 
     # get estimator
-    theta_query_ss = np.linalg.solve(XTX, XTy)
-    y_pred = np.dot(X_test, theta_query_ss)
+    theta_query_ss = np.linalg.solve(XTX, XTy)    # not rescaled
+    y_pred = np.dot(X_test, theta_query_ss)       # not rescaled
     mse_query_ss = mean_squared_error(y_test, y_pred)
     r2_query_ss = r2_score(y_test, y_pred)
 
@@ -111,14 +118,13 @@ def dp_query_synth_data_method(synth_X, synth_y, training_columns, cols_to_dummy
     for i,col in enumerate(synth_X_ordered.columns):
         assert col == X_test_aim.columns[i]
 
-    theta_aim_synth, mse_aim_synth, r2_aim_synth = public_linear_regression(synth_X_ordered, synth_y,
+    theta_aim_synth, mse_aim_synth, r2_aim_synth = public_method(synth_X_ordered, synth_y,
                                                                             X_test_aim, y_test)
 
     return (theta_aim_synth, mse_aim_synth, r2_aim_synth)
 
 
-def AdaSSP_linear_regression(X, y, epsilon, delta, rho, bound_X, bound_y, bound_XTX, X_test, y_test, original_y_range,
-                             rescale):
+def AdaSSP_linear_regression(X, y, epsilon, delta, rho, bound_X, bound_y, bound_XTX, X_test, y_test):
     """Returns DP linear regression model and metrics using AdaSSP. AdaSSP is described in Algorithm 2 of
         https://arxiv.org/pdf/1803.02596.pdf.
 
@@ -165,11 +171,6 @@ def AdaSSP_linear_regression(X, y, epsilon, delta, rho, bound_X, bound_y, bound_
     theta_dp = np.linalg.solve(XTX_dp_reg, XTy_dp)
 
     y_pred = np.dot(X_test, theta_dp)
-
-    # # scale y pred back to original domain if rescale needed. Linear rescaling.
-    # if rescale:
-    #     y_pred = (y_pred - (-1)) / (+1 - (-1)) * (original_y_range[1] - original_y_range[0]) + original_y_range[0]
-    #     y_pred = y_pred.astype(int)
     mse_dp = mean_squared_error(y_test, y_pred)
     r2_dp = r2_score(y_test, y_pred)
 

@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
     parser.add_argument('--dataset', help='Dataset', type=str, default='ACSincome')
-    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
+    parser.add_argument('--method', help='Method to be used', type=str, default='genobjpert',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
     parser.add_argument('--num_experiments', type=int, default=1)
@@ -170,6 +170,8 @@ if __name__ == "__main__":
         X = X_ohe.copy()
         X_test = X_test_ohe.copy()
 
+    encoded_features = [col.split(".")[0] for col in X if col.split("_")[0] in cols_to_dummy]
+
     # print(f'Max Sensitivity: {max([np.linalg.norm(row) for row in X.to_numpy()])}')
 
     for t in range(num_experiments):
@@ -182,7 +184,8 @@ if __name__ == "__main__":
                 (public_f1score, public_accuracy,
                  public_fpr, public_tpr,
                  public_threshold, public_auc) = public_method(X, y, X_test, y_test,
-                                                               cols_to_dummy, attribute_dict, one_hot, approx = False)
+                                                               cols_to_dummy, attribute_dict,
+                                                               encoded_features, one_hot, approx = False)
                 res_out.append([dataset, method, public_auc, public_f1score, public_accuracy, t, seed,
                                 n_limit, train_ratio, None, epsilon])
                 print(f"public auc reg: {public_auc}")
@@ -216,8 +219,7 @@ if __name__ == "__main__":
                 # with open(filename, 'rb') as handle:
                 #     W = pickle.load(handle)
 
-                ######## AIM SS #########
-                encoded_features = [col.split(".")[0] for col in X if col.split("_")[0] in cols_to_dummy]
+                ######## AIM SS ########
 
                 (DPapprox_f1score, DPapprox_accuracy,
                  DPapprox_fpr, DPapprox_tpr,

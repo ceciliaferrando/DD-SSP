@@ -27,21 +27,6 @@ import argparse
 from tqdm.auto import tqdm
 
 
-def public_linear_regression(X, y, X_test, y_test):
-    XTX = np.dot(X.T, X)
-    XTy = np.dot(X.T, y)
-    theta_public = np.linalg.solve(XTX, XTy)
-    # reg = LinearRegression(fit_intercept=False).fit(X, y)
-    # theta_public = reg.coef_.T
-
-    y_pred = np.dot(X_test, theta_public)
-    mse_score_public = mean_squared_error(y_test, y_pred)
-    r2_score_public = r2_score(y_test, y_pred)
-
-    return theta_public, mse_score_public, r2_score_public
-
-
-
 
 def splitdf(df, target, train_ratio):
     """Split the dataframe into train and test

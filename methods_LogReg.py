@@ -43,10 +43,8 @@ import warnings
 from utils_LogReg import *
 from utils import *
 
-def public_method(X, y, X_test, y_test, cols_to_dummy, attribute_dict, one_hot, approx):
+def public_method(X, y, X_test, y_test, cols_to_dummy, attribute_dict, encoded_features, one_hot, approx):
     if one_hot:
-        # feature encoding
-        encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
         X_pub = normalize_minus1_1(X, attribute_dict, encoded_features)
         X_test_pub = normalize_minus1_1(X_test, attribute_dict, encoded_features)
     else:
@@ -84,9 +82,10 @@ def get_aim_W_and_data(pgm_train_df, domain, target, marginals_pgm, epsilon, del
 
 def dp_query_approx_ss_method(W_expanded, attribute_dict, training_columns, encoded_features, target, domain, n_train,
                               cols_to_dummy, one_hot, X_test, y_test):
-    all_attributes_expanded = training_columns.append(pd.Index([target]))  # for aim dp query ss
-    ZTZ = get_ZTZ(W_expanded, attribute_dict, all_attributes_expanded, cols_to_dummy, rescale=one_hot)
-    XTXy2 = ZTZ.loc[training_columns, training_columns]
+
+    all_attributes_expanded = training_columns.append(pd.Index([target]))
+    ZTZ = get_ZTZ(W_expanded, attribute_dict, all_attributes_expanded, cols_to_dummy, rescale=True)
+    XTX = ZTZ.loc[training_columns, training_columns]
     XTy = ZTZ.loc[training_columns, target]
 
     if one_hot:
