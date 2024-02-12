@@ -34,18 +34,15 @@ from utils_LinReg import *
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
-    parser.add_argument('--dataset', help='Dataset', type=str, default='linregbinary')
-    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
+    parser.add_argument('--dataset', help='Dataset', type=str, default='ACSincome-LIN')
+    parser.add_argument('--method', help='Method to be used', type=str, default='adassp',
                         choices=['public', 'adassp', 'aim'])
     parser.add_argument('--delta', type=float, default=1e-5)
-    parser.add_argument('--num_experiments', type=int, default=1)
-    parser.add_argument('--seed', type=int, default=237)
+    parser.add_argument('--num_experiments', type=int, default=5)
+    parser.add_argument('--seed', type=int, default=238)
     parser.add_argument('--n_limit', type=int, default=20_000)
     parser.add_argument('--train_ratio', type=float, default=0.7)
-    parser.add_argument('--iterate_over_gamma', action=argparse.BooleanOptionalAction,
-                        default=False)
-    parser.add_argument('--one_hot', action=argparse.BooleanOptionalAction,
-                        default=False)
+    parser.add_argument('--one_hot', type=str, default='True')
     args = parser.parse_args()
 
     dataset = args.dataset
@@ -55,8 +52,7 @@ if __name__ == "__main__":
     seed = args.seed
     n_limit = args.n_limit
     train_ratio = args.train_ratio
-    one_hot = args.one_hot
-    print(one_hot)
+    one_hot = True if args.one_hot == 'True' else False
     rescale = one_hot # if one hot encoding is active, always rescale features
 
     marginals_pgm = 'all-pairs'
@@ -104,11 +100,6 @@ if __name__ == "__main__":
 
             if method == 'public':
 
-                # X_public = copy.deepcopy(X)
-                # X_test_public = copy.deepcopy(X_test)
-                # y_public = copy.deepcopy(y)
-                # y_test_public = copy.deepcopy(y_test)
-
                 theta_public, mse_public, r2_public = public_method(X, y, X_test, y_test)
 
                 res_out.append([dataset, method, mse_public, r2_public, t, seed,
@@ -122,8 +113,6 @@ if __name__ == "__main__":
 
                 n, d = X.shape
 
-                print(target)
-
                 # get marginal tables and synthetic data for training
                 W, synth_X, synth_y = get_aim_W_and_data(pgm_train_df, domain, target, marginals_pgm,
                                                          epsilon, delta, model_size, max_iters, n)
@@ -133,8 +122,6 @@ if __name__ == "__main__":
                              f'{seed}seed_W.pickle'
                 with open(W_filename, 'wb') as handle:
                     pickle.dump(W, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-                print(training_columns)
 
                 theta_aim, mse_aim, r2_aim = dp_query_ss_method(W_expanded, attribute_dict, training_columns, target,
                                                                 cols_to_dummy, one_hot, X_test, y_test)
@@ -158,20 +145,6 @@ if __name__ == "__main__":
             elif method == 'adassp':
 
                 rho = 0.05
-                #
-                # if rescale == True:
-                #     # normalize numerical features between -1 and +1
-                #     # making sure to exclude the one-hot encoded categorical variables, which should be in domain [0, 1]
-                #     # rescale target too
-                #     encoded_features = [col for col in X if col.split("_")[0] in cols_to_dummy]
-                #     original_ranges = {feature: [0, domain[feature]] for feature in attribute_dict.keys()}
-                #     X_adassp = normalize_minus1_1(X, encoded_features, original_ranges)
-                #     X_test_adassp = normalize_minus1_1(X_test, encoded_features, original_ranges)
-                #     y_adassp = normalize_minus1_1(y, encoded_features, original_ranges)
-                # else:
-                #     X_adassp = copy.deepcopy(X)
-                #     X_test_adassp = copy.deepcopy(X_test)
-                #     y_adassp = copy.deepcopy(y)
 
                 bound_XTX, bound_X = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot)
                 bound_y = 1 if one_hot else np.abs(np.max(attribute_dict[target]))

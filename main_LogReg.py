@@ -48,7 +48,7 @@ from methods_LogReg import *
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
-    parser.add_argument('--dataset', help='Dataset', type=str, default='ACSincome')
+    parser.add_argument('--dataset', help='Dataset', type=str, default='logregbinary5lowcorr')
     parser.add_argument('--method', help='Method to be used', type=str, default='genobjpert',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument('--iterate_over_gamma', action=argparse.BooleanOptionalAction,
                         default=False)
     parser.add_argument('--one_hot', action=argparse.BooleanOptionalAction,
-                        default=True)
+                        default=False)
     args = parser.parse_args()
     
     
@@ -124,12 +124,6 @@ if __name__ == "__main__":
     pgm_train_df = X.join(y)
     print("y", y)
 
-    # Create dictionary with feature levels
-    feature_dict = {}
-    for column in X.columns:
-        unique_values = sorted(X[column].unique().tolist())  #### HERE ORDER MATTERS
-        feature_dict[column] = unique_values
-    features = list(feature_dict.keys())
     target_values = sorted(y[target].unique().tolist())
 
     attribute_dict = {}
@@ -170,7 +164,10 @@ if __name__ == "__main__":
         X = X_ohe.copy()
         X_test = X_test_ohe.copy()
 
-    encoded_features = [col.split(".")[0] for col in X if col.split("_")[0] in cols_to_dummy]
+    if one_hot:
+        encoded_features = [col.split(".")[0] for col in X if col.split("_")[0] in cols_to_dummy]
+    else:
+        encoded_features = [f for f in attribute_dict.keys() if f!=target]
 
     # print(f'Max Sensitivity: {max([np.linalg.norm(row) for row in X.to_numpy()])}')
 

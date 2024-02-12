@@ -155,7 +155,7 @@ def objective_perturbation_method(X, y, X_test, y_test, attribute_dict, target, 
     else:
         X_gop = X
         X_test_gop = X_test
-        _, max_row_norm = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot, rescale=False)
+        _, max_row_norm = get_bound_XTX(attribute_dict, target, cols_to_dummy, one_hot)
 
     zeta = max_row_norm
     lmda = smooth_const = max_row_norm ** 2 / 4
