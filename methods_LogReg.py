@@ -85,7 +85,7 @@ def dp_query_approx_ss_method(W_expanded, attribute_dict, training_columns, enco
 
     all_attributes_expanded = training_columns.append(pd.Index([target]))
     ZTZ = get_ZTZ(W_expanded, attribute_dict, all_attributes_expanded, cols_to_dummy, rescale=True)
-    XTX = ZTZ.loc[training_columns, training_columns]
+    XTXy2 = ZTZ.loc[training_columns, training_columns]
     XTy = ZTZ.loc[training_columns, target]
 
     if one_hot:

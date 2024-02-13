@@ -40,9 +40,7 @@ import time
 import argparse
 import warnings
 
-from dpquery_utils import PGMsynthesizer
-from dpquery_chebyshev import Chebyshev, phi_logit
-
+from utils import *
 
 # GENOBJPERT UTILS
 

@@ -49,15 +49,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Experiment Inputs')
     parser.add_argument('--dataset', help='Dataset', type=str, default='logregbinary5lowcorr')
-    parser.add_argument('--method', help='Method to be used', type=str, default='genobjpert',
+    parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                         choices=['public', 'diffprivlib', 'aim', 'genobjpert'])
     parser.add_argument('--delta', type=float, default=1e-5)
     parser.add_argument('--num_experiments', type=int, default=1)
     parser.add_argument('--seed', type=int, default=236)
     parser.add_argument('--n_limit', type=int, default=20_000)
     parser.add_argument('--train_ratio', type=float, default=0.7)
-    parser.add_argument('--iterate_over_gamma', action=argparse.BooleanOptionalAction,
-                        default=False)
     parser.add_argument('--one_hot', action=argparse.BooleanOptionalAction,
                         default=False)
     args = parser.parse_args()
@@ -70,12 +68,11 @@ if __name__ == "__main__":
     seed = args.seed
     n_limit = args.n_limit
     train_ratio = args.train_ratio
-    iterate_over_gamma = args.iterate_over_gamma
     one_hot = args.one_hot
-    rescale = True
+    rescale = one_hot
     print(f"one hot {one_hot}, rescale {rescale}")
     
-    model_size = 40  # FOR AIM
+    model_size = 100  # FOR AIM
     max_iters = 1000   # FOR AIM
 
     # Setup hyper-parameters for the runs
@@ -135,7 +132,7 @@ if __name__ == "__main__":
 
     # If one_hot is active, then we one hot both the train set and the test set.
     # Here we just define the variables we will use later.
-    cols_to_dummy, training_columns = None, X.columns
+    cols_to_dummy, training_columns = [], X.columns
     if one_hot:
         # We find which columns we need to one-hot encode. The others we don't encode are categorical ordinal
         cols_to_dummy = get_cols_to_dummy(dataset)
