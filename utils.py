@@ -38,7 +38,7 @@ from tqdm.auto import tqdm
 from private_pgm_local.src.mbi import Dataset, FactoredInference
 from diffprivlib_main.diffprivlib_local import models as dp
 from private_pgm_local.mechanisms import aim
-from dpsynth.workload import Workload
+from private_pgm_local.src.mbi.workload import Workload
 
 
 
@@ -115,6 +115,8 @@ def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
     features_to_encode, all_columns = [], X.columns
 
     if one_hot:
+        X_pre = X
+        X_test_pre = X_test
         print(f"one-hot encoding {dataset}...")
         features_to_encode = get_features_to_encode(dataset)
         X_ohe = one_hot_encode(X, features_to_encode, attribute_dict)
@@ -143,7 +145,7 @@ def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
 
     X_test = X_test[all_columns]
 
-    return (X, X_test, y, y_test, pgm_train_df, domain, target, attribute_dict,
+    return (X, X_test, y, y_test, X_pre, X_test_pre, pgm_train_df, domain, target, attribute_dict,
             features_to_encode, encoded_features, original_ranges, all_columns, zero_std_cols)
 
 
@@ -592,6 +594,42 @@ def get_aim_model(pgm_train_df, domain, target, marginals_pgm, epsilon, delta, m
     aim_model, synth  = aim_model.run(pgm_dataset, mrgs_wkld, n_samples, initial_cliques=y_pairs)
     return aim_model, mrgs_wkld
 
+
+def get_unnormalized_prob(x, potentials):
+    #print("potentials", potentials)
+    sum_potentials = 0
+    for factor in potentials:
+        #print("factor", factor)
+        #print("potentials[factor]", potentials[factor])
+        index = tuple([int(x[attr]) for attr in factor])
+        #print("index", index)
+        factor_value = potentials[factor].values[index]
+        #print("factor_value", factor_value)
+        sum_potentials += factor_value
+
+    return sum_potentials
+
+
+def pred_y_given_x_from_G(x, G, target, target_levels):
+    potentials = G.potentials
+    unnormalized_probs = {}
+
+    # print("potentials", potentials)
+    # print("target_levels", target_levels)
+
+    for level in range(len(target_levels)):
+        # print("level", level)
+        x_and_y = x.copy()
+        x_and_y[target] = level
+        unnormalized_probs[level] = get_unnormalized_prob(x_and_y, potentials)
+        # print("unnormalized_probs[level]", unnormalized_probs[level])
+
+    list_guesses = list(unnormalized_probs.items())
+    list_guesses.sort(key=lambda x: x[1])
+    best_guess = list_guesses[-1][0]
+
+    return best_guess
+
 def testLogReg(theta, X_test, y_test):
     logits = np.dot(X_test, theta)
     probabilities = 1 / (1 + np.exp(-logits))
@@ -658,7 +696,7 @@ def objective_perturbation_method(X, y, epsilon, delta, bound_X, bound_y, all_co
     # 0 means local minimium reached, 1 and 2 means convergence by function value or theta value
     # 3 is maximum number of iterations reached, 4 linear search failed
     finish_opt = False
-    patience = 3
+    patience = 5
 
     while not finish_opt and patience > 0:
 

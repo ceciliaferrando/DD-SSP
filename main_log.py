@@ -38,20 +38,20 @@ from tqdm.auto import tqdm
 from private_pgm_local.src.mbi import Dataset, FactoredInference
 from diffprivlib_main.diffprivlib_local import models as dp
 from private_pgm_local.mechanisms import aim
-from dpsynth.workload import Workload
+from private_pgm_local.src.mbi.workload import Workload
 
 from utils import *
 
 parser = argparse.ArgumentParser(description='Experiment Inputs')
 parser.add_argument('--dataset', help='Dataset', type=str, default='ACSPublicCoverage')
-parser.add_argument('--method', help='Method to be used', type=str, default='aim',
-                    choices=['public', 'adassp', 'aim'])
+parser.add_argument('--method', help='Method to be used', type=str, default='genobjpert',
+                    choices=['public', 'genobjpert', 'aim'])
 parser.add_argument('--delta', type=float, default=1e-5)
-parser.add_argument('--num_experiments', type=int, default=1)
+parser.add_argument('--num_experiments', type=int, default=5)
 parser.add_argument('--seed', type=int, default=240)
-parser.add_argument('--n_limit', type=int, default=20_000)
+parser.add_argument('--n_limit', type=int, default=50_000)
 parser.add_argument('--one_hot', type=str, default='True')
-parser.add_argument('--scale_y', type=str, default='True')
+parser.add_argument('--scale_y', type=str, default='False')
 parser.add_argument('--aim_y_mrg_opt', type=str, default='True')
 
 args = parser.parse_args()
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
     np.random.seed(seed)
 
-    (X, X_test, y, y_test,
+    (X, X_test, y, y_test, X_pre, X_test_pre,
      pgm_train_df, domain, target,
      attribute_dict, features_to_encode, encoded_features,
      original_ranges, all_columns, zero_std_cols) = preprocess_data(dataset, target_dict, n_limit,
@@ -115,9 +115,6 @@ if __name__ == "__main__":
 
                 theta_public = public_logreg(X, y, all_columns)
 
-                print(X_test.columns)
-                print(theta_public.index)
-
                 logits = np.dot(X_test, theta_public)
                 probabilities = 1 / (1 + np.exp(-logits))
                 public_auc = roc_auc_score(y_test, probabilities)
@@ -136,7 +133,7 @@ if __name__ == "__main__":
 
             elif method == 'aim':
 
-                for aim_y_mrg_opt in [True, False]:
+                for aim_y_mrg_opt in [False]:
 
                     file_id = f'{dataset}_epsilon{epsilon}_delta{delta}_nlimit{n_limit}_t{t}_ymrgs{aim_y_mrg_opt}'
                     if os.path.exists(f'models/aim_model_{file_id}.pkl'):
@@ -151,8 +148,6 @@ if __name__ == "__main__":
 
                         aim_model_graph, workload = get_aim_model(pgm_train_df, domain, target, PGMmarginals, epsilon, delta, model_size,
                                                             max_iters, len(X), initial_cliques)
-
-                        print(workload)
 
                         with open(f'models/aim_model_{file_id}.pkl', 'wb') as f:
                             dill.dump(aim_model_graph, f)
@@ -181,7 +176,7 @@ if __name__ == "__main__":
                     dpqueryss_auc = roc_auc_score(y_test, probabilities)
 
                     res_out.append([dataset, "aim_ss_init"+str(aim_y_mrg_opt), dpqueryss_auc, t, seed, n_limit, None, epsilon, delta])
-                    print(f"dpqueryss auc reg: {dpqueryss_auc}")
+                    print(f"dpqueryss auc: {dpqueryss_auc}")
 
                     # AIM synth
                     if one_hot:
@@ -210,7 +205,23 @@ if __name__ == "__main__":
                     theta_aimsynth = theta_aimsynth.to_numpy()
 
                     aimsynth_auc = testLogReg(theta_aimsynth, X_test, y_test)
+                    print(f"aim synth auc: {aimsynth_auc}")
                     res_out.append([dataset, "aim_init"+str(aim_y_mrg_opt), aimsynth_auc, t, seed, n_limit, None, epsilon, delta])
+
+                    # PGM direct prediction
+                    G = aim_model_graph
+                    target_levels = attribute_dict[target]
+                    G_y = X_test_pre.apply(pred_y_given_x_from_G, axis=1, args=(G, target, target_levels))
+                    G_y = G_y.to_frame(name=target)
+                    print(y_test[:10], G_y[:10])
+                    print(stop)
+                    #G_fpr, G_tpr, G_threshold = roc_curve(y_test, G_y)
+                    G_auc_1 = roc_auc_score(y_test, G_y)
+                    G_auc_2 = roc_auc_score(y_test, G_y.apply(lambda x: 1-x))
+                    G_auc = max(G_auc_1, G_auc_2)
+                    print("G auc", G_auc)
+                    res_out.append([dataset, "aim_G_init"+str(aim_y_mrg_opt), G_auc, t, seed, n_limit, None, epsilon,
+                         delta])
 
             out_df = pd.DataFrame(res_out, columns=col_out)
             one_hot_flag_str = '' if not one_hot else 'one-hot_True'

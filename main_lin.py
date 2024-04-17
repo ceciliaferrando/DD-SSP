@@ -38,16 +38,16 @@ from tqdm.auto import tqdm
 from private_pgm_local.src.mbi import Dataset, FactoredInference
 from diffprivlib_main.diffprivlib_local import models as dp
 from private_pgm_local.mechanisms import aim
-from dpsynth.workload import Workload
+from private_pgm_local.src.mbi.workload import Workload
 
 from utils import *
 
 parser = argparse.ArgumentParser(description='Experiment Inputs')
-parser.add_argument('--dataset', help='Dataset', type=str, default='taxi')
+parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
 parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                     choices=['public', 'adassp', 'aim'])
 parser.add_argument('--delta', type=float, default=1e-5)
-parser.add_argument('--num_experiments', type=int, default=5)
+parser.add_argument('--num_experiments', type=int, default=1)
 parser.add_argument('--seed', type=int, default=239)
 parser.add_argument('--n_limit', type=int, default=50000)
 parser.add_argument('--one_hot', type=str, default='True')
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     np.random.seed(seed)
 
 
-    (X, X_test, y, y_test,
+    (X, X_test, y, y_test, X_pre, X_test_pre,
      pgm_train_df, domain, target,
      attribute_dict, features_to_encode, encoded_features,
      original_ranges, all_columns, zero_std_cols) = preprocess_data(dataset, target_dict, n_limit,
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
             elif method == 'aim':
 
-                for aim_y_mrg_opt in [True, False]:
+                for aim_y_mrg_opt in [False]:
 
                     file_id = f'{dataset}_epsilon{epsilon}_delta{delta}_nlimit{n_limit}_t{t}_aimopt{aim_y_mrg_opt}'
                     if os.path.exists(f'models/aim_model_{file_id}.pkl'):
@@ -184,6 +184,7 @@ if __name__ == "__main__":
                     theta_dpqueryss, XTX_dpqueryss, XTy_dpqueryss = dp_query_ss_linreg(ZTZ, all_columns, target)
 
                     mse_dpqueryss = testLinReg(theta_dpqueryss, X_test, y_test)
+                    print(f"aim ss mse {mse_dpqueryss}")
                     res_out.append([dataset, "aim_ss_init"+str(aim_y_mrg_opt), mse_dpqueryss, None, t, seed,
                                     n_limit, None, epsilon, delta])
 
@@ -214,7 +215,20 @@ if __name__ == "__main__":
                     theta_aimsynth = theta_aimsynth.to_numpy()
 
                     mse_aimsynth = testLinReg(theta_aimsynth, X_test, y_test)
+                    print(f"aim synth mse {mse_aimsynth}")
                     res_out.append([dataset, "aim_init"+str(aim_y_mrg_opt), mse_aimsynth, None, t, seed,
+                                    n_limit, None, epsilon, delta])
+
+                    # PGM direct prediction
+                    G = aim_model_graph
+                    target_levels = attribute_dict[target]
+                    G_y = X_test_pre.apply(pred_y_given_x_from_G, axis=1, args=(G, target, target_levels))
+                    G_y = G_y.to_frame(name=target)
+                    if scale_y:
+                        G_y = normalize_minus1_1(G_y, attribute_dict, encoded_features)
+                    G_mse = mean_squared_error(y_test, G_y)
+                    print(G_mse)
+                    res_out.append([dataset, "aim_G_init" + str(aim_y_mrg_opt), G_mse, None, t, seed,
                                     n_limit, None, epsilon, delta])
 
             out_df = pd.DataFrame(res_out, columns=col_out)
