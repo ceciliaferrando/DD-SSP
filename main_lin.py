@@ -43,12 +43,12 @@ from private_pgm_local.src.mbi.workload import Workload
 from utils import *
 
 parser = argparse.ArgumentParser(description='Experiment Inputs')
-parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
+parser.add_argument('--dataset', help='Dataset', type=str, default='fire')
 parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                     choices=['public', 'adassp', 'aim'])
 parser.add_argument('--delta', type=float, default=1e-5)
-parser.add_argument('--num_experiments', type=int, default=1)
-parser.add_argument('--seed', type=int, default=239)
+parser.add_argument('--num_experiments', type=int, default=5)
+parser.add_argument('--seed', type=int, default=22)
 parser.add_argument('--n_limit', type=int, default=50000)
 parser.add_argument('--one_hot', type=str, default='True')
 parser.add_argument('--scale_y', type=str, default='True')
@@ -102,6 +102,8 @@ if __name__ == "__main__":
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    models_dir = "models_linear"
+
 
     for t in range(num_experiments):
 
@@ -114,11 +116,7 @@ if __name__ == "__main__":
             bound_y = 1 if one_hot else np.abs(np.max(attribute_dict[target]))
 
             XTX_public = pd.DataFrame(np.dot(X.T, X), index=X.columns, columns=X.columns)
-            print(XTX_public)
             XTy_public = pd.DataFrame(np.dot(X.T, y), index=X.columns)
-
-            print(f"X bound {bound_X}")
-            print(f"y bound {bound_y}")
 
             if method == 'public':
                 theta_public = public_linreg(X, y)
@@ -148,8 +146,8 @@ if __name__ == "__main__":
                 for aim_y_mrg_opt in [False]:
 
                     file_id = f'{dataset}_epsilon{epsilon}_delta{delta}_nlimit{n_limit}_t{t}_aimopt{aim_y_mrg_opt}'
-                    if os.path.exists(f'models/aim_model_{file_id}.pkl'):
-                        with open(f'models/aim_model_{file_id}.pkl', 'rb') as f:
+                    if os.path.exists(f'{models_dir}/aim_model_{file_id}.pkl'):
+                        with open(f'{models_dir}/aim_model_{file_id}.pkl', 'rb') as f:
                             aim_model_graph = dill.load(f)
                             mrgs = selectTargetMarginals(pgm_train_df.columns, target, mode=PGMmarginals)
                             workload = {(m, 1.0) for m in mrgs}
@@ -161,11 +159,11 @@ if __name__ == "__main__":
                         aim_model_graph, workload = get_aim_model(pgm_train_df, domain, target, PGMmarginals, epsilon, delta, model_size,
                                                             max_iters, len(X), initial_cliques)
 
-                        with open(f'models/aim_model_{file_id}.pkl', 'wb') as f:
+                        with open(f'{models_dir}/aim_model_{file_id}.pkl', 'wb') as f:
                             dill.dump(aim_model_graph, f)
 
                         # 2) load AIM model and get marginal tables and synthetic data X_synth, y_synth
-                        with open(f'models/aim_model_{file_id}.pkl', 'rb') as f:
+                        with open(f'{models_dir}/aim_model_{file_id}.pkl', 'rb') as f:
                             aim_model_graph = dill.load(f)
 
                     print(workload)
@@ -222,16 +220,16 @@ if __name__ == "__main__":
                     # PGM direct prediction
                     G = aim_model_graph
                     target_levels = attribute_dict[target]
-                    G_y = X_test_pre.apply(pred_y_given_x_from_G, axis=1, args=(G, target, target_levels))
+                    G_y = X_test_pre.apply(pred_y_given_x_from_G, axis=1, args=(G, target, target_levels, 'linear'))
                     G_y = G_y.to_frame(name=target)
                     if scale_y:
                         G_y = normalize_minus1_1(G_y, attribute_dict, encoded_features)
                     G_mse = mean_squared_error(y_test, G_y)
-                    print(G_mse)
+                    print("G mse", G_mse)
                     res_out.append([dataset, "aim_G_init" + str(aim_y_mrg_opt), G_mse, None, t, seed,
                                     n_limit, None, epsilon, delta])
 
             out_df = pd.DataFrame(res_out, columns=col_out)
             filename_out = f'{outdir}{dataset}_{method}_{epsilon}_{t}_{num_experiments}exps_{n_limit}limit_' \
-                           f'{seed}seed_aim_opt{aim_y_mrg_opt}.csv'
+                           f'{seed}seed.csv'
             out_df.to_csv(filename_out)

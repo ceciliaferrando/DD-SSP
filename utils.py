@@ -27,7 +27,7 @@ from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import f1_score, roc_curve, auc, accuracy_score, confusion_matrix, roc_auc_score, mean_squared_error
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import GridSearchCV
-from scipy.special import softmax, expit
+from scipy.special import softmax, expit, logsumexp
 from scipy.optimize import minimize, fmin_bfgs, fmin_tnc
 from scipy import sparse
 from absl import flags
@@ -246,7 +246,6 @@ def balance_target_pairs(out, target):
 
     for b in range(0, total_len):  # We start from 1 since b can't be 0
         current_diff = abs((y_marg_len + b * y_marg_len) - p * total_len)  # we want 50% target marginals
-        print("b", b, "current diff", current_diff)
         if current_diff < previous_diff:
             best_b = b
             previous_diff = current_diff
@@ -293,8 +292,6 @@ def normalize_minus1_1(X, attribute_dict, encoded_features):
 
         # for all other features, rescale to [-1, 1]
         else:
-            print(original_ranges)
-            print(col)
             colmin = original_ranges[col][0]
             colmax = original_ranges[col][1]
 
@@ -580,7 +577,7 @@ class SSApproxLL():
         z = np.dot(X, self.theta.T)
         y_pred_proba = expit(z)
         y_pred = 2 * ((y_pred_proba >= threshold).astype(int)) - 1
-        print("y pred dpapproxss", y_pred)
+        print("y pred ss", y_pred)
         return (y_pred)
 
 def get_aim_model(pgm_train_df, domain, target, marginals_pgm, epsilon, delta, model_size, max_iters, n_samples, initial_cliques):
@@ -595,42 +592,86 @@ def get_aim_model(pgm_train_df, domain, target, marginals_pgm, epsilon, delta, m
     return aim_model, mrgs_wkld
 
 
-def get_unnormalized_prob(x, potentials):
-    #print("potentials", potentials)
+def get_unnormalized_prob(data, potentials):
+    """
+    Parameters
+    data: x and y data (dataframe)
+    potentials: AIM model potentials ({factor: potential} dictionary)
+
+    Returns
+    sum_potentials: raw sum of potentials for x_and_y
+    """
+
     sum_potentials = 0
+
     for factor in potentials:
-        #print("factor", factor)
-        #print("potentials[factor]", potentials[factor])
-        index = tuple([int(x[attr]) for attr in factor])
-        #print("index", index)
+        index = tuple([int(data[attr]) for attr in factor])
         factor_value = potentials[factor].values[index]
-        #print("factor_value", factor_value)
         sum_potentials += factor_value
 
     return sum_potentials
 
 
-def pred_y_given_x_from_G(x, G, target, target_levels):
+def pred_y_given_x_from_G(x, G, target, target_levels, model):
+    """
+    Parameters
+    x: 1xd feature vector for one data point (dataframe)
+    G: graphical model output by AIM (dictionary)
+    target: name of target variable (str)
+    target_levels: all possible values the target variable can take (list)
+
+    Returns
+    best_guess: y value that maximized the unnormalized probability (int)
+    """
+    # get the model potentials
     potentials = G.potentials
     unnormalized_probs = {}
 
-    # print("potentials", potentials)
-    # print("target_levels", target_levels)
-
     for level in range(len(target_levels)):
-        # print("level", level)
         x_and_y = x.copy()
         x_and_y[target] = level
         unnormalized_probs[level] = get_unnormalized_prob(x_and_y, potentials)
-        # print("unnormalized_probs[level]", unnormalized_probs[level])
 
-    list_guesses = list(unnormalized_probs.items())
-    list_guesses.sort(key=lambda x: x[1])
-    best_guess = list_guesses[-1][0]
+    # print(unnormalized_probs)
+    # exp_unnorm_probs = {k: np.exp(unnormalized_probs[k]) for k in unnormalized_probs}
+    # tot = np.sum(list(exp_unnorm_probs.values()))
+    #
+    # print(exp_unnorm_probs)
+    #
+    # norm_probs = {k: exp_unnorm_probs[k]/tot for k in exp_unnorm_probs}
+    #
+    # # for k in norm_probs:
+    # #     if np.isnan(norm_probs[k]):
+    # #         print("HERE")
+    # #         norm_probs = {el: 1/len(norm_probs) for el in norm_probs}
+    #
+    # print(norm_probs)
 
-    return best_guess
+    log_probs = list(unnormalized_probs.values())
+    log_sum_exp = logsumexp(log_probs)
+    normalized_log_probs = log_probs - log_sum_exp
+
+    # exp to get normalized probabilities
+    norm_probs = np.exp(normalized_log_probs)
+    keys = list(unnormalized_probs.keys())
+    norm_probs = dict(zip(keys, norm_probs))
+
+    # pick y value that gives the maximum unnormalized prop
+    if model == 'logistic':
+        probabilities = list(norm_probs.values())
+        return probabilities
+
+    elif model == 'linear':
+        list_guesses = norm_probs.items()
+        guess = np.sum([g[0] * g[1] for g in list_guesses])
+        return guess
+
+    else:
+        print("method not implemented!")
+        return
 
 def testLogReg(theta, X_test, y_test):
+    print(y_test)
     logits = np.dot(X_test, theta)
     probabilities = 1 / (1 + np.exp(-logits))
     auc = roc_auc_score(y_test, probabilities)
@@ -642,6 +683,7 @@ def testLinReg(theta, X_test, y_test):
     return mse
 
 def public_logreg(X, y, all_columns):
+    print(all_columns)
     model = LogisticRegression(penalty=None, fit_intercept=False, max_iter=2000)
     model.fit(X.to_numpy(), y.to_numpy().ravel())
     theta = model.coef_.ravel()   # probabilities for class 1
