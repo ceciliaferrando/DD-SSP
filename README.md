@@ -31,7 +31,7 @@ Results are progressively saved in .csv format a folder named [dataset]_linear o
 f'{dataset}_{method}_{epsilon}_{trial_num}_{num_experiments}exps_{data_size_limit}limit_{seed}seed.csv'
 ```
 
-References for external packages and assets included:
+References for external packages and assets:
 
 mbi and private-pgm: https://github.com/ryan112358/private-pgm
 hdmm: https://github.com/ryan112358/hdmm-1
