@@ -11,9 +11,9 @@ from scipy.special import expit, logsumexp
 from scipy.optimize import minimize, fmin_tnc
 from itertools import combinations
 
-from private_pgm_local.src.mbi import Dataset, FactoredInference
-from private_pgm_local.mechanisms import aim
-from private_pgm_local.src.mbi.workload import Workload
+from private_pgm.src.mbi import Dataset, FactoredInference
+from private_pgm.mechanisms import aim
+from private_pgm.src.mbi.workload import Workload
 
 
 def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
