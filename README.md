@@ -31,9 +31,10 @@ Results are progressively saved in .csv format a folder named [dataset]_linear o
 f'{dataset}_{method}_{epsilon}_{trial_num}_{num_experiments}exps_{data_size_limit}limit_{seed}seed.csv'
 ```
 
-References for external packages and assets:
-
+References for external packages and assets used in this repo:
+```
 mbi and private-pgm: https://github.com/ryan112358/private-pgm
 hdmm: https://github.com/ryan112358/hdmm-1
-hd-datasets: https://github.com/ryan112358/hd-datasets
+hd-datasets-master: https://github.com/ryan112358/hd-datasets
 ACS data: https://github.com/socialfoundations/folktables
+```
