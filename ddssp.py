@@ -5,7 +5,7 @@ sys.path.append('..')
 from scipy.special import expit, logsumexp
 from scipy.optimize import minimize, fmin_tnc
 
-from private_pgm_local.src.mbi.workload import Workload
+from private_pgm.src.mbi.workload import Workload
 
 from utils import *
 
