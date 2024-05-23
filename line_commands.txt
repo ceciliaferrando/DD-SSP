@@ -1,0 +1,39 @@
+# Line commands for LINEAR REGRESSION methods
+
+python main_lin.py --dataset adult --method public --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset adult --method adassp --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset adult --method aim --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+
+python main_lin.py --dataset ACSincome-LIN --method public --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset ACSincome-LIN --method adassp --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset ACSincome-LIN --method aim --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+
+python main_lin.py --dataset fire --method public --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset fire --method adassp --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset fire --method aim --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+
+python main_lin.py --dataset taxi --method public --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset taxi --method adassp --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+python main_lin.py --dataset taxi --method aim --num_experiments 5 --n_limit 50000 --one_hot True --scale_y True
+
+# Line commands for LOGISTIC REGRESSION methods
+
+python main_log.py --dataset adult --method public --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset adult --method genobjpert --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset adult --method aim --num_experiments 5 --n_limit 50000 --one_hot True
+
+python main_log.py --dataset ACSincome --method public --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSincome --method genobjpert --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSincome --method aim --num_experiments 5 --n_limit 50000 --one_hot True
+
+python main_log.py --dataset ACSemployment --method public --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSemployment --method genobjpert --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSemployment --method aim --num_experiments 5 --n_limit 50000 --one_hot True
+
+python main_log.py --dataset ACSmobility --method public --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSmobility --method genobjpert --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSmobility --method aim --num_experiments 5 --n_limit 50000 --one_hot True
+
+python main_log.py --dataset ACSPublicCoverage --method public --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSPublicCoverage --method genobjpert --num_experiments 5 --n_limit 50000 --one_hot True
+python main_log.py --dataset ACSPublicCoverage --method aim --num_experiments 5 --n_limit 50000 --one_hot True
