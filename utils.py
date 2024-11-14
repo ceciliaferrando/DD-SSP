@@ -88,15 +88,16 @@ def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
     # If one_hot is active, then we one hot both the train set and the test set.
     features_to_encode, all_columns = [], X.columns
 
+    X_pre = X.copy()
+    X_test_pre = X_test.copy()
+
     if one_hot:
-        X_pre = X
-        X_test_pre = X_test
         print(f"one-hot encoding {dataset}...")
         features_to_encode = get_features_to_encode(dataset)
         X_ohe = one_hot_encode(X, features_to_encode, attribute_dict)
         X_test_ohe = one_hot_encode(X_test, features_to_encode, attribute_dict)
         assert set(X_ohe.columns) == set(X_test_ohe.columns)
-        X = X_ohe.copy(deep=True)
+        X = X_ohe.copy()
         X_test = X_test_ohe.copy()
 
     all_columns = pd.Index(Union(X.columns, X_test.columns))
@@ -110,14 +111,15 @@ def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
             y = normalize_minus1_1(y, attribute_dict, encoded_features)
             y_test = normalize_minus1_1(y_test, attribute_dict, encoded_features)
 
+    X = X[all_columns]
+    X_test = X_test[all_columns]
+
     zero_std_cols = []
     for col in X.columns:
         if np.std(X[col]) == 0:
             print(f"feature {col} is a zero vector! Dropping it from training dataset")
             zero_std_cols.append(col)
     X.drop(columns=zero_std_cols, inplace=True)
-
-    X_test = X_test[all_columns]
 
     return (X, X_test, y, y_test, X_pre, X_test_pre, pgm_train_df, domain, target, attribute_dict,
             features_to_encode, encoded_features, original_ranges, all_columns, zero_std_cols)
