@@ -79,10 +79,10 @@ if __name__ == "__main__":
 
     ##### Grid Search Hyperparameters #################################################################################
 
-    batch_sizes = [len(X)]
+    batch_sizes = [len(X//4), len(X)]
     grad_clip_norms = [0.2] # best clipnorm nondp: 0.2
-    epochs_list = [200]
-    learning_rates = [0.005]   # best lr nondp: 0.01
+    epochs_list = [50, 100]
+    learning_rates = [0.5, 0.01, 0.005]   # best lr nondp: 0.01
     #learning_rates = [0.0006, 0.0008, 0.001, 0.002, 0.004]
 
     best_results = {}
@@ -147,7 +147,6 @@ if __name__ == "__main__":
 
                                 non_dp_trainer.compare_loss_with_custom(X, y)
 
-                                print(stop)
 
                                 # record non-DP results
                                 res_out.append(

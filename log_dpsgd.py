@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,6 +8,8 @@ from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 from opacus import PrivacyEngine
 from opacus.accountants.utils import get_noise_multiplier
+
+from baselines import *
 
 import matplotlib
 matplotlib.use('Agg')
@@ -165,23 +168,20 @@ class LogisticRegressionBaseTrainer:
 
     def compare_loss_with_custom(self, X, y):
         """
-        Compares the PyTorch loss with the custom NumPy-based loss for the whole dataset.
-
-        Parameters:
-            X (torch.Tensor): The input features for the dataset.
-            y (torch.Tensor): The target labels for the dataset.
+        Compares the PyTorch loss with the custom loss for the whole dataset.
         """
         # forward pass with PyTorch
         self.model.eval()
         with torch.no_grad():
-            inputs, targets = X.float(), y.float().unsqueeze(1)
+            inputs = torch.tensor(X.values, dtype=torch.float32)  # Convert to float tensor
+            targets = torch.tensor(y.values, dtype=torch.float32).view(-1, 1)  # Ensure targets have shape [n, 1]
             outputs = self.model(inputs)
             pytorch_loss = self.criterion(outputs, targets).item()
             print(f"PyTorch computed loss: {pytorch_loss}")
 
         theta = np.concatenate([p.detach().numpy().flatten() for p in self.model.parameters()])
-        x_np = X.numpy()
-        y_np = y.numpy().flatten()
+        x_np = X.to_numpy()
+        y_np = y.to_numpy().flatten()
 
         # custom loss function
         def custom_loss(theta, x, y):
@@ -189,16 +189,16 @@ class LogisticRegressionBaseTrainer:
             h = LogisticRegressionObjective.hypothesis(theta, x)
             return -(1 / m) * np.sum(y * np.log(h) + (1 - y) * np.log(1 - h))
 
-        # Calculate custom loss
+        # compare the losses
+
         custom_loss_value = custom_loss(theta, x_np, y_np)
         print(f"Custom computed loss: {custom_loss_value}")
 
-        # Compare both losses
         difference = abs(pytorch_loss - custom_loss_value)
         print(f"Difference between PyTorch and custom loss: {difference}")
 
 
-# Non-Private Trainer (inherits from Base Trainer)
+# Non-DP Trainer (inherits from Base Trainer)
 class NonPrivateSGDTrainer(LogisticRegressionBaseTrainer):
     def __init__(self, model, train_loader, test_loader, epochs, lr):
         super().__init__(model, train_loader, test_loader, epochs, lr)
