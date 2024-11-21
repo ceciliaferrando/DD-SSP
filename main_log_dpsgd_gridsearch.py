@@ -54,6 +54,9 @@ if __name__ == "__main__":
     max_iters = 1000
     PGMmarginals = 'all-pairs'
 
+    train_public_sgd = False
+    use_dp = True
+
     ##### Setup ########################################################################################################
 
     np.random.seed(seed)
@@ -79,10 +82,10 @@ if __name__ == "__main__":
 
     ##### Grid Search Hyperparameters #################################################################################
 
-    batch_sizes = [len(X//4), len(X)]
-    grad_clip_norms = [0.2] # best clipnorm nondp: 0.2
-    epochs_list = [50, 100]
-    learning_rates = [0.5, 0.01, 0.005]   # best lr nondp: 0.01
+    batch_sizes = [256, 1024, len(X)]
+    grad_clip_norms = [0.1, 0.2] # best clipnorm nondp: 0.2
+    epochs_list = [1, 5, 10, 20]
+    learning_rates = [0.01, 0.1, 1.0]   # best lr nondp: 0.01
     #learning_rates = [0.0006, 0.0008, 0.001, 0.002, 0.004]
 
     best_results = {}
@@ -95,7 +98,7 @@ if __name__ == "__main__":
     for t in range(num_experiments):
 
         # for epsilon in [50]:
-        for epsilon in [50]:
+        for epsilon in [0.5, 1.0, 2.0]:
 
             print(f'epsilon: {epsilon}, t: {t}')
 
@@ -111,6 +114,10 @@ if __name__ == "__main__":
                         for epochs in epochs_list:
                             for lr in learning_rates:
 
+                                # Reindex training data
+                                X = X.reindex(columns=all_columns, fill_value=0)
+                                X_test = X_test.reindex(columns=all_columns, fill_value=0)
+
                                 # prepare data loaders
                                 train_loader, test_loader = prepare_data_loaders(X.to_numpy(), y.to_numpy().flatten(),
                                                                                  X_test.to_numpy(),
@@ -119,7 +126,8 @@ if __name__ == "__main__":
                                                                                  scale_data=False,
                                                                                  shuffle=False)
 
-                                # print(X)
+                                print(X.shape)
+                                print(X_test.shape)
                                 # for data, target in train_loader:
                                 #     data_np = data.numpy()
                                 #     print(data)
@@ -129,35 +137,37 @@ if __name__ == "__main__":
                                 #     data_np = data.numpy()
                                 #     print(data)
 
-                                # Non-Private Logistic Regression
-                                print("Training Non-Private Logistic Regression...")
-                                non_private_model = LogisticRegressionModel(input_dim=d)
-                                non_dp_trainer = NonPrivateSGDTrainer(
-                                    model=non_private_model,
-                                    train_loader=train_loader,
-                                    test_loader=test_loader,
-                                    epochs=epochs,
-                                    lr=lr
-                                )
-                                non_dp_trainer.train()
-                                non_dp_trainer.evaluate()
-                                non_dp_auc = non_dp_trainer.auc()
-                                non_dp_trainer.plot_loss()
-                                non_dp_trainer.plot_grad_norms()
+                                if train_public_sgd:
 
-                                non_dp_trainer.compare_loss_with_custom(X, y)
+                                    # Non-Private Logistic Regression
+                                    print("Training Non-Private Logistic Regression...")
+                                    non_private_model = LogisticRegressionModel(input_dim=d)
+                                    non_dp_trainer = NonPrivateSGDTrainer(
+                                        model=non_private_model,
+                                        train_loader=train_loader,
+                                        test_loader=test_loader,
+                                        epochs=epochs,
+                                        lr=lr
+                                    )
+                                    non_dp_trainer.train()
+                                    non_dp_trainer.evaluate()
+                                    non_dp_auc = non_dp_trainer.auc()
+                                    non_dp_trainer.plot_loss()
+                                    non_dp_trainer.plot_grad_norms()
+
+                                    non_dp_trainer.compare_loss_with_custom(X, y)
 
 
-                                # record non-DP results
-                                res_out.append(
-                                    [dataset, 'non-dpsgd', non_dp_auc, t, seed, n_limit, None, epsilon, delta,
-                                     batch_size,
-                                     lr, grad_clip_norm, epochs]
-                                )
+                                    # record non-DP results
+                                    res_out.append(
+                                        [dataset, 'non-dpsgd', non_dp_auc, t, seed, n_limit, None, epsilon, delta,
+                                         batch_size,
+                                         lr, grad_clip_norm, epochs]
+                                    )
 
-                                # Update best non-DP AUC if current is higher
-                                if non_dp_auc > best_non_dp_auc:
-                                    best_non_dp_auc = non_dp_auc
+                                    # Update best non-DP AUC if current is higher
+                                    if non_dp_auc > best_non_dp_auc:
+                                        best_non_dp_auc = non_dp_auc
 
                                 # Differentially Private Logistic Regression
                                 print("Training Differentially Private Logistic Regression...")
@@ -172,7 +182,7 @@ if __name__ == "__main__":
                                     epsilon=epsilon,
                                     delta=delta,
                                     max_grad_norm=grad_clip_norm,
-                                    use_dp=True  # Set to True to enable DP
+                                    use_dp=use_dp  # Set to True to enable DP
                                 )
                                 dp_trainer.train()
                                 dp_trainer.evaluate()

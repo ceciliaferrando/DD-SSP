@@ -11,9 +11,9 @@ from scipy.special import expit, logsumexp
 from scipy.optimize import minimize, fmin_tnc
 from itertools import combinations
 
-from private_pgm.src.mbi import Dataset, FactoredInference
-from private_pgm.mechanisms import aim
-from private_pgm.src.mbi.workload import Workload
+from private_pgm_local.src.mbi import Dataset, FactoredInference
+from private_pgm_local.mechanisms import aim
+from private_pgm_local.src.mbi.workload import Workload
 
 
 def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
@@ -343,40 +343,60 @@ def one_hot_encode(df, features_to_encode, attribute_dict):
 
     return encoded_df
 
+
 def testLogReg(theta, X_test, y_test):
+
+    # Calculate logits and probabilities
     logits = np.dot(X_test, theta)
     probabilities = 1 / (1 + np.exp(-logits))
+
+    # Compute AUC
     auc = roc_auc_score(y_test, probabilities)
+
     return auc
 
+
 def testLinReg(theta, X_test, y_test):
+
+    # Predict using the linear model
     y_pred = np.dot(X_test, theta)
+
+    # Compute Mean Squared Error
     mse = mean_squared_error(y_test, y_pred)
     return mse
 
 def public_logreg(X, y, all_columns):
+    # Train logistic regression model
     model = LogisticRegression(penalty=None, fit_intercept=False, max_iter=2000)
     model.fit(X.to_numpy(), y.to_numpy().ravel())
-    theta = model.coef_.ravel()   # probabilities for class 1
+
+    # Extract coefficients and align with all_columns
+    theta = model.coef_.ravel()
     theta = pd.DataFrame(theta, index=X.columns)
     theta = theta.reindex(index=all_columns, fill_value=0)
 
     return theta
 
-def public_linreg(X, y):
-
+def public_linreg(X, y, all_columns):
+    # Train linear regression model
     n, d = X.shape
-
     X_vec, y_vec = X.values, y.values.ravel()
     XTX = np.dot(X_vec.T, X_vec)
     XTX = XTX + np.eye(d) * 1e-12
     XTy = np.dot(X_vec.T, y_vec)
     theta = np.linalg.solve(XTX, XTy)
 
-    # regr = LinearRegression(fit_intercept=False)
-    # regr.fit(X.values, y.values.ravel())
-    # theta = regr.coef_
-    theta = pd.DataFrame(theta)
-    theta = theta.set_index(X.columns)
+    # Align theta with all_columns
+    theta = pd.DataFrame(theta, index=X.columns)
+    theta = theta.reindex(index=all_columns, fill_value=0)
 
     return theta
+
+
+
+
+
+
+
+
+
