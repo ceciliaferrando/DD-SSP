@@ -21,20 +21,17 @@ from dpsgd_models import LogisticRegressionModel, LinearRegressionModel
 from dpsgd_dp_trainer import DPSGDTrainer
 from dpsgd_utils import prepare_data_loaders
 
-
 parser = argparse.ArgumentParser(description='Experiment Inputs')
 parser.add_argument('--dataset', help='Dataset', type=str, default='adult')
-parser.add_argument('--method', help='Method to be used', type=str, default='dpsgd',
-                    choices=['public', 'genobjpert', 'aim'])
+parser.add_argument('--method', help='Method to be used', type=str, default='aim',
+                    choices=['public', 'adassp', 'aim'])
 parser.add_argument('--delta', type=float, default=1e-5)
 parser.add_argument('--num_experiments', type=int, default=5)
 parser.add_argument('--seed', type=int, default=242)
-parser.add_argument('--n_limit', type=int, default=50_000)
+parser.add_argument('--n_limit', type=int, default=50000)
 parser.add_argument('--one_hot', type=str, default='True')
-parser.add_argument('--scale_y', type=str, default='False')
+parser.add_argument('--scale_y', type=str, default='True')
 parser.add_argument('--aim_y_mrg_opt', type=str, default='False')
-parser.add_argument('--grad_clip_norm', type=float, default=1.0)
-
 args = parser.parse_args()
 
 dataset = args.dataset
@@ -45,32 +42,30 @@ num_experiments = args.num_experiments
 seed = args.seed
 n_limit = args.n_limit
 one_hot = True if args.one_hot == 'True' else False
-scale_y = False
+scale_y = True if args.scale_y == 'True' else False
 aim_y_mrg_opt = True if args.aim_y_mrg_opt == 'True' else None
-grad_clip_norm = args.grad_clip_norm
 
 if __name__ == "__main__":
-    ##### AIM model parameters ########################################################################################
+
+    ##### AIM model parameters  ########################################################################################
     model_size = 200
     max_iters = 1000
     PGMmarginals = 'all-pairs'
 
-    train_public_sgd = False
-    use_dp = True
-
-    ##### Setup ########################################################################################################
+    ##### Setup  #######################################################################################################
 
     np.random.seed(seed)
 
-    target_dict = {'adult': 'income>50K', 'ACSincome': 'PINCP', 'ACSemployment': 'ESR', "ACSmobility": 'MIG',
-                   "ACSPublicCoverage": 'PUBCOV', 'ACSTravelTime': 'JWMNP', 'logregbinary20': 'predicted'}
+    target_dict = {'adult': 'education-num', 'taxi': 'totalamount', 'fire': 'Priority', 'ACSincome-LIN': 'PINCP',
+                   'ACSPublicCoverage': 'AGEP', 'ACSmobility': 'AGEP', 'linregbinary': 'predicted',
+                   'linregbinary10': 'predicted',
+                   'linregbinary30': 'predicted'}
 
     (X, X_test, y, y_test, X_pre, X_test_pre,
      pgm_train_df, domain, target,
      attribute_dict, features_to_encode, encoded_features,
      original_ranges, all_columns, zero_std_cols) = preprocess_data(dataset, target_dict, n_limit,
                                                                     one_hot, scale_y)
-
 
     n, d = X.shape
 
@@ -81,12 +76,12 @@ if __name__ == "__main__":
     learning_rates = [0.001, 0.01, 0.1, 1.0]
 
     hyperparam_space = list(product(batch_sizes, grad_clip_norms, epochs_list, learning_rates))
-
+    use_dp = True
 
     epsilon_values = [0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0]
 
     ##### Check for Saved Best Hyperparameters ########################################################################
-    outdir = dataset + "_logreg/"
+    outdir = dataset + "_linreg/"
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
@@ -101,7 +96,7 @@ if __name__ == "__main__":
         #rdp_alphas = rdp_alphas_for_epsilon[epsilon]
         rdp_alphas = None
 
-        best_params_file = os.path.join(f"0101_best_hyperparams_{dataset}_{epsilon}.json")
+        best_params_file = os.path.join(f"0108_lin_best_hyperparams_{dataset}_{epsilon}.json")
         if os.path.exists(best_params_file):
             print(f"Loading best hyperparameters from {best_params_file}")
             with open(best_params_file, "r") as f:
@@ -111,7 +106,7 @@ if __name__ == "__main__":
             ##### Grid Search for Best Hyperparameters ####################################################################
 
             print(f"Running grid search for epsilon={epsilon}")
-            best_auc = 0
+            best_mse = float("inf")
             best_params = None
 
             for batch_size in batch_sizes:
@@ -123,7 +118,7 @@ if __name__ == "__main__":
                                 X_test.to_numpy(), y_test.to_numpy().flatten(),
                                 batch_size=batch_size, scale_data=False, shuffle=False)
 
-                            dp_model = LogisticRegressionModel(input_dim=d)
+                            dp_model = LinearRegressionModel(input_dim=d)
                             dp_trainer = DPSGDTrainer(
                                 model=dp_model,
                                 train_loader=train_loader,
@@ -139,10 +134,10 @@ if __name__ == "__main__":
 
                             print("smallest alpha", dp_trainer.smallest_alpha)
                             dp_trainer.train()
-                            dpsgd_auc = dp_trainer.auc()
+                            dpsgd_mse = dp_trainer.mse()
 
-                            if dpsgd_auc > best_auc:
-                                best_auc = dpsgd_auc
+                            if dpsgd_mse < best_mse:
+                                best_mse = dpsgd_mse
                                 best_params = {
                                     'Batch_Size': batch_size,
                                     "Grad_Clip_Norm": grad_clip_norm,
@@ -151,7 +146,7 @@ if __name__ == "__main__":
                                 }
 
             best_params_per_epsilon[str(epsilon)] = best_params
-            print(f"Best parameters for epsilon={epsilon}: {best_params} with AUC={best_auc}")
+            print(f"Best parameters for epsilon={epsilon}: {best_params} with MSE={best_mse}")
 
         # Save best hyperparameters to JSON
         with open(best_params_file, "w") as f:
@@ -173,7 +168,7 @@ if __name__ == "__main__":
                 X_test.to_numpy(), y_test.to_numpy().flatten(),
                 batch_size=best_params['Batch_Size'], scale_data=False, shuffle=True)
 
-            dp_model = LogisticRegressionModel(input_dim=d)
+            dp_model = LinearRegressionModel(input_dim=d)
             dp_trainer = DPSGDTrainer(
                 model=dp_model,
                 train_loader=train_loader,
@@ -187,16 +182,16 @@ if __name__ == "__main__":
                 rdp_alphas = rdp_alphas
             )
             dp_trainer.train()
-            dpsgd_auc = dp_trainer.auc()
+            dpsgd_mse = dp_trainer.mse()
 
             # Append results for this epsilon
             trial_res_out.append([
-                dataset, 'dpsgd', dpsgd_auc, trial, seed, n_limit, None, epsilon, delta,
+                dataset, 'dpsgd', dpsgd_mse, trial, seed, n_limit, None, epsilon, delta,
                 best_params['Batch_Size'], best_params['Learning_Rate'], best_params['Grad_Clip_Norm'], best_params['Epochs']
             ])
 
         # Save results for this trial
-        col_out = ['dataset', 'method', 'auc', 'experiment_n', 'seed', 'n_limit', 'param', 'epsilon', 'delta',
+        col_out = ['dataset', 'method', 'mse', 'experiment_n', 'seed', 'n_limit', 'param', 'epsilon', 'delta',
                    'batch_size', 'learning_rate', 'grad_clip_norm', 'epochs']
         trial_out_df = pd.DataFrame(trial_res_out, columns=col_out)
         one_hot_flag_str = '' if not one_hot else 'one-hot_True'
