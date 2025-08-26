@@ -12,11 +12,11 @@ from utils import *
 from baselines import *
 
 parser = argparse.ArgumentParser(description='Experiment Inputs')
-parser.add_argument('--dataset', help='Dataset', type=str, default='ACSincome')
+parser.add_argument('--dataset', help='Dataset', type=str, default='ACSPublicCoverage')
 parser.add_argument('--method', help='Method to be used', type=str, default='aim',
                     choices=['public', 'genobjpert', 'aim'])
 parser.add_argument('--delta', type=float, default=1e-5)
-parser.add_argument('--num_experiments', type=int, default=1)
+parser.add_argument('--num_experiments', type=int, default=5)
 parser.add_argument('--seed', type=int, default=242)
 parser.add_argument('--n_limit', type=int, default=50_000)
 parser.add_argument('--one_hot', type=str, default='True')
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     n, d = X.shape
 
-    res_out = []
+
     col_out = ['dataset', 'method', 'auc', 'experiment_n', 'seed', 'n_limit',
                'param', 'epsilon', 'delta']
     outdir = dataset + "_logreg/"
@@ -70,7 +70,9 @@ if __name__ == "__main__":
 
     for t in range(num_experiments):
 
-        for epsilon in [0.05, 0.1, 0.5, 1.0, 2.0]:
+        res_out = []
+
+        for epsilon in [0.05, 0.1, 0.2, 0.5, 1.0, 2.0]:
 
             print(f'epsilon: {epsilon}, t: {t}')
 
@@ -84,23 +86,21 @@ if __name__ == "__main__":
 
                 theta_public = public_logreg(X, y, all_columns)
 
-                logits = np.dot(X_test, theta_public)
-                probabilities = 1 / (1 + np.exp(-logits))
-                public_auc = roc_auc_score(y_test, probabilities)
+                public_auc = testLogReg(theta_public, X_test, y_test)
 
                 res_out.append([dataset, method, public_auc, t, seed, n_limit, None, epsilon, delta])
                 print(f"public auc reg: {public_auc}")
+
 
             ##### ObjPert ##############################################################################################
 
             elif method == 'genobjpert':
                 theta_genobjpert = objective_perturbation_method(X, y, epsilon, delta, bound_X, bound_y, all_columns)
-                logits = np.dot(X_test, theta_genobjpert)
-                probabilities = 1 / (1 + np.exp(-logits))
-                genobjpert_auc = roc_auc_score(y_test, probabilities)
+                genobjpert_auc = testLogReg(theta_genobjpert, X_test, y_test)
 
                 res_out.append([dataset, method, genobjpert_auc, t, seed, n_limit, None, epsilon, delta])
                 print(f"genobjpert auc reg: {genobjpert_auc}")
+
 
             ##### DDSSP & AIM Synth ####################################################################################
 
@@ -139,12 +139,34 @@ if __name__ == "__main__":
                 cheb = Chebyshev(-6, 6, 3, phi_logit)   # corresponds
                 theta_dpqueryss = dp_query_approx_ss_logreg(ZTZ, all_columns, target, n, cheb, C=1.0)
 
+                theta_dpqueryss = theta_dpqueryss.reindex(index=all_columns, fill_value=0)
+                X_test = X_test.reindex(columns=theta_dpqueryss.index, fill_value=0)
                 logits = np.dot(X_test, theta_dpqueryss)
                 probabilities = 1 / (1 + np.exp(-logits))
                 dpqueryss_auc = roc_auc_score(y_test, probabilities)
 
                 res_out.append([dataset, "aim_ss", dpqueryss_auc, t, seed, n_limit, None, epsilon, delta])
                 print(f"dpqueryss auc: {dpqueryss_auc}")
+
+                XTX = ZTZ.loc[all_columns, all_columns]
+                XTy = ZTZ.loc[all_columns, target]
+                b1, b2, b3 = cheb.c  # chebyshev constants
+                theta_cf = - b2 / (2 * b3) * np.linalg.solve(XTX, XTy)
+
+                diff = theta_dpqueryss.to_numpy().flatten() - theta_cf
+                mse = np.mean(diff ** 2)  # mean squared error across p coefficients
+                rmse = np.sqrt(mse)
+                rel_l2 = np.linalg.norm(diff) / np.linalg.norm(theta_cf)
+
+                np.save(f'theta_ss_{epsilon}.npy', theta_dpqueryss)
+                np.save(f'theta_closedform_{epsilon}.npy', theta_cf)
+
+                logits = np.dot(X_test, theta_cf)
+                probabilities = 1 / (1 + np.exp(-logits))
+                dpqueryss_cf_auc = roc_auc_score(y_test, probabilities)
+                res_out.append([dataset, "aim_ss_closedform", dpqueryss_cf_auc, t, seed, n_limit, None, epsilon,
+                                delta])
+                print(f"dpqueryss closed form auc: {dpqueryss_cf_auc}")
 
                 # AIM synth
                 if one_hot:
@@ -176,10 +198,11 @@ if __name__ == "__main__":
                 res_out.append([dataset, "aim", aimsynth_auc, t, seed, n_limit, None, epsilon, delta])
                 print("aim synth auc", aimsynth_auc)
 
-            ##### progressively save ###################################################################################
+        ##### progressively save trials ################################################################################
 
-            out_df = pd.DataFrame(res_out, columns=col_out)
-            one_hot_flag_str = '' if not one_hot else 'one-hot_True'
-            filename_out = f'{outdir}{dataset}_{method}_{epsilon}_{t}_{num_experiments}exps_{n_limit}limit_' \
-                           f'{seed}seed_{one_hot_flag_str}onehot.csv'
-            out_df.to_csv(filename_out)
+        out_df = pd.DataFrame(res_out, columns=col_out)
+        one_hot_flag_str = '' if not one_hot else 'one-hot_True'
+        filename_out = f'{outdir}{dataset}_{method}_{epsilon}_{t}_{num_experiments}exps_{n_limit}limit_' \
+                       f'{seed}seed_{one_hot_flag_str}.csv'
+        out_df.to_csv(filename_out)
+        print(f"Saved results for trial {t} to {filename_out}")

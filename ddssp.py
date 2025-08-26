@@ -5,7 +5,8 @@ sys.path.append('..')
 from scipy.special import expit, logsumexp
 from scipy.optimize import minimize, fmin_tnc
 
-from private_pgm.src.mbi.workload import Workload
+from private_pgm_local.src.mbi.workload import Workload
+# from private_pgm_local.mechanisms.mst import MST
 
 from utils import *
 
@@ -19,6 +20,10 @@ def get_aim_model(pgm_train_df, domain, target, marginals_pgm, epsilon, delta, m
     print(f"initial cliques set to {y_pairs}")
     aim_model = aim.AIM(epsilon=epsilon, delta=delta, max_iters=max_iters, max_model_size=model_size)
     aim_model, synth  = aim_model.run(pgm_dataset, mrgs_wkld, n_samples, initial_cliques=y_pairs)
+
+    # mrgs = selectTargetMarginals(pgm_train_df.columns, target, mode=marginals_pgm)
+    # print(mrgs)
+    # aim_model, synth = MST(pgm_dataset, mrgs, epsilon, delta)
     return aim_model, mrgs_wkld
 
 def get_ZTZ(W, attribute_dict, columns, features_to_encode, target, rescale, scale_y):
@@ -152,6 +157,7 @@ def phi_logit(x):
     return -math.log(1 + math.exp(-x))
 
 def get_dp_approx_ll(theta, yTX, XTXy2, a, b, c, n):
+    # print(f"a {a}, b {b}, c {c}")
     dp_approx_ll = n * a + np.dot(theta, yTX) * b + np.dot(np.dot(theta, XTXy2), theta) * c
     return dp_approx_ll
 
@@ -163,6 +169,7 @@ class SSApproxLL():
         self.penalty = penalty
         self.alpha = alpha
         self.theta = None
+        self.tol = 1e-12
         self.yTX = yTX
         self.XTXy2 = XTXy2
 
@@ -187,8 +194,8 @@ class SSApproxLL():
             res = minimize(lambda theta: -self.log_likelihood(theta),
                            x0,
                            method='L-BFGS-B',
-                           options={'maxiter': 10000},
-                           tol=0.00001)
+                           options={'maxiter': 100000},
+                           tol=self.tol)
             theta_star = res.x
             fun = res.fun
 
@@ -196,8 +203,8 @@ class SSApproxLL():
             res = minimize(lambda theta: -self.log_likelihood(theta) + self.alpha * l2_penalty(theta),
                            x0,
                            method='L-BFGS-B',
-                           options={'maxiter': 10000},
-                           tol=0.00001)
+                           options={'maxiter': 100000},
+                           tol=self.tol)
             theta_star = res.x
             fun = res.fun - self.alpha * l2_penalty(theta_star)
 

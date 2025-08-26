@@ -11,9 +11,9 @@ from scipy.special import expit, logsumexp
 from scipy.optimize import minimize, fmin_tnc
 from itertools import combinations
 
-from private_pgm_local.src.mbi import Dataset, FactoredInference
-from private_pgm_local.mechanisms import aim
-from private_pgm_local.src.mbi.workload import Workload
+from private_pgm.src.mbi import Dataset, FactoredInference
+#from private_pgm.mechanisms import aim
+#from private_pgm.src.mbi.workload import Workload
 
 
 def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
@@ -120,6 +120,8 @@ def preprocess_data(dataset, target_dict, n_limit, one_hot, scale_y):
             print(f"feature {col} is a zero vector! Dropping it from training dataset")
             zero_std_cols.append(col)
     X.drop(columns=zero_std_cols, inplace=True)
+
+    X_test = X_test[X.columns]
 
     return (X, X_test, y, y_test, X_pre, X_test_pre, pgm_train_df, domain, target, attribute_dict,
             features_to_encode, encoded_features, original_ranges, all_columns, zero_std_cols)
@@ -367,7 +369,7 @@ def testLinReg(theta, X_test, y_test):
 
 def public_logreg(X, y, all_columns):
     # Train logistic regression model
-    model = LogisticRegression(penalty=None, fit_intercept=False, max_iter=2000)
+    model = LogisticRegression(penalty='none', fit_intercept=False, max_iter=2000)
     model.fit(X.to_numpy(), y.to_numpy().ravel())
 
     # Extract coefficients and align with all_columns
@@ -391,12 +393,3 @@ def public_linreg(X, y, all_columns):
     theta = theta.reindex(index=all_columns, fill_value=0)
 
     return theta
-
-
-
-
-
-
-
-
-
